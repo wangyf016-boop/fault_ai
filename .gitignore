@@ -73,6 +73,7 @@ ocr_output/
 ocr_uploads/
 frontend/ocr_output/
 frontend/ocr_uploads/
+.runtime/
 
 # Generated data
 data/output/
