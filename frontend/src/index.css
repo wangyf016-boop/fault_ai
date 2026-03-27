@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Optional global overrides */
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+a {
+  @apply text-blue-600 hover:text-blue-500 transition-colors;
+}
+
+.app-shell {
+  @apply min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100;
+}
