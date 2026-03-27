@@ -1,25 +1,36 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 *$py.class
 *.so
 .Python
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 env/
 venv/
 ENV/
-.venv
+.venv/
 
-# Node
+# Node / Frontend
 node_modules/
 dist/
 dist-ssr/
 .cache/
+.vite/
+frontend/.vite/
+coverage/
 
 # Environment
 .env
 .env.local
 .env.*.local
 *.local
+frontend/.env
+frontend/.env.production
 
 # IDE
 .vscode/
@@ -45,8 +56,39 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Database
+# Databases
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite3
+app/db/*.db
+app/db/*.db-journal
+app/db/*.db-wal
+app/db/*.db-shm
+
+# Runtime outputs
+ocr_output/
+ocr_uploads/
+frontend/ocr_output/
+frontend/ocr_uploads/
+
+# Generated data
+data/output/
+Version2/output/
+
+# Models
+models/saved/
+
+# Large or private source data
+data/input/*
+!data/input/sample_500_clean.csv
+!data/input/components.csv
+Version2/*.csv
+
+# Nested local projects
+frontend/ocr_search_app/
+
+# Docker runtime data
+docker-data/
