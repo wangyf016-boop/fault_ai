@@ -213,6 +213,7 @@ def get_llm():
             model=model,
             base_url=base_url,
             temperature=0,
+            reasoning=False,
             num_predict=2048,
             repeat_penalty=1.1,
             top_p=0.9,
@@ -1933,6 +1934,16 @@ class GraphMutationRollbackResponse(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
+class GraphMutationRollbackGroupResponse(BaseModel):
+    group_id: str
+    requested: int
+    rolled_back: int
+    skipped: int
+    failed: int
+    rollback_ids: List[str]
+    message: str
+
+
 class GraphMutationLogListResponse(BaseModel):
     total: int
     items: List[Dict[str, Any]]
@@ -2181,6 +2192,118 @@ def _find_graph_mutation(mutation_id: str) -> Optional[Dict[str, Any]]:
             if str(item.get("mutation_id")) == str(mutation_id):
                 return item
     return None
+
+
+def _load_all_graph_mutation_logs() -> List[Dict[str, Any]]:
+    if not _GRAPH_MUTATION_LOG_PATH.exists():
+        return []
+    rows: List[Dict[str, Any]] = []
+    with _GRAPH_MUTATION_LOG_PATH.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+    return rows
+
+
+def _clean_operation_text(value: Any, max_len: int = 128) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    return text[:max_len]
+
+
+def _resolve_operation_meta(
+    request: Optional[Request],
+    fallback_type: str,
+    fallback_group_id: Optional[str] = None,
+) -> Dict[str, str]:
+    header_group_id = ""
+    header_operation_type = ""
+    if request is not None:
+        header_group_id = _clean_operation_text(request.headers.get("X-Operation-Group-Id"))
+        header_operation_type = _clean_operation_text(request.headers.get("X-Operation-Type"), max_len=64)
+        if not header_group_id:
+            header_group_id = _clean_operation_text(request.headers.get("X-Request-ID"))
+
+    if not header_group_id:
+        try:
+            header_group_id = _clean_operation_text(request_id_var.get())
+        except Exception:
+            header_group_id = ""
+
+    if not header_group_id:
+        header_group_id = _clean_operation_text(fallback_group_id or str(uuid.uuid4()))
+
+    if not header_operation_type:
+        header_operation_type = _clean_operation_text(fallback_type, max_len=64) or "mutation"
+
+    return {
+        "operation_group_id": header_group_id,
+        "operation_type": header_operation_type,
+    }
+
+
+def _collect_rolled_back_source_ids(rows: List[Dict[str, Any]]) -> set:
+    out = set()
+    for row in rows:
+        if str(row.get("action") or "").strip() != "rollback":
+            continue
+        target = row.get("target") if isinstance(row.get("target"), dict) else {}
+        src = str(target.get("source_mutation_id") or "").strip()
+        if src:
+            out.add(src)
+    return out
+
+
+def _mutation_business_desc(item: Dict[str, Any]) -> str:
+    action = str(item.get("action") or "").strip()
+    target = item.get("target") if isinstance(item.get("target"), dict) else {}
+    if action == "create_node":
+        node_name = str(target.get("node_name") or "").strip() or str(target.get("node_id") or "-")
+        node_label = str(target.get("node_label") or "").strip()
+        return f"新增节点：{node_name}" + (f"（{node_label}）" if node_label else "")
+    if action == "update_node":
+        before_name = str(target.get("node_name_before") or "").strip()
+        after_name = str(target.get("node_name_after") or "").strip()
+        before_label = str(target.get("node_label_before") or "").strip()
+        after_label = str(target.get("node_label_after") or "").strip()
+        if before_name and after_name and before_name != after_name:
+            return f"名称变更：{before_name} -> {after_name}"
+        if before_label and after_label and before_label != after_label:
+            return f"类型变更：{before_label} -> {after_label}"
+        return f"更新节点：{after_name or before_name or str(target.get('node_id') or '-')}"
+    if action == "delete_node":
+        node_name = str(target.get("node_name") or "").strip() or str(target.get("node_id") or "-")
+        node_label = str(target.get("node_label") or "").strip()
+        return f"删除节点：{node_name}" + (f"（{node_label}）" if node_label else "")
+    if action == "create_edge":
+        from_name = str(target.get("from_name") or "").strip() or str(target.get("from_id") or "-")
+        to_name = str(target.get("to_name") or "").strip() or str(target.get("to_id") or "-")
+        rel_type = str(target.get("type") or "").strip()
+        return f"新增关系：{from_name} -> {to_name}" + (f"（{rel_type}）" if rel_type else "")
+    if action == "delete_edge":
+        from_name = str(target.get("from_name") or "").strip() or str(target.get("from_id") or "-")
+        to_name = str(target.get("to_name") or "").strip() or str(target.get("to_id") or "-")
+        rel_type = str(target.get("type") or "").strip()
+        return f"删除关系：{from_name} -> {to_name}" + (f"（{rel_type}）" if rel_type else "")
+    if action == "rollback":
+        src = str(target.get("source_mutation_id") or "").strip() or "-"
+        return f"回滚操作：{src}"
+    return action or "mutation"
+
+
+def _decorate_mutation_log(item: Dict[str, Any]) -> Dict[str, Any]:
+    out = dict(item or {})
+    out["operation_group_id"] = str(out.get("operation_group_id") or "").strip()
+    out["operation_type"] = str(out.get("operation_type") or "").strip()
+    out["business_desc"] = _mutation_business_desc(out)
+    return out
 
 
 def _neo4j_driver():
@@ -2457,7 +2580,9 @@ async def graph_node_neighbors(node_id: str, limit: int = 50):
 
 
 @app.post("/graph/node")
-async def create_graph_node(payload: GraphNodeCreateRequest):
+async def create_graph_node(payload: GraphNodeCreateRequest, request: Request):
+    from neo4j.exceptions import ClientError
+
     label = _safe_label(payload.type)
     name = str(payload.name or "").strip()
     if not name:
@@ -2468,54 +2593,54 @@ async def create_graph_node(payload: GraphNodeCreateRequest):
     if payload.description is not None:
         props["description"] = str(payload.description)
 
+    op_meta = _resolve_operation_meta(request, fallback_type="create_node")
     driver = _neo4j_driver()
     try:
         _db = os.getenv("NEO4J_DATABASE", "machining")
         with driver.session(database=_db) as session:
-            cypher = f"""
-MATCH (n:`{label}` {{name: $name}})
-RETURN elementId(n) AS id
-LIMIT 1
-"""
-            exists_row = session.run(cypher, name=name).single()
-            if exists_row:
-                # 同类型同名节点已存在时，直接复用已有节点，避免前端重复创建报 409。
-                return {
-                    "success": True,
-                    "id": str(exists_row["id"]),
-                    "type": label,
-                    "name": name,
-                    "deduplicated": True,
-                    "mutation_id": None,
-                }
-
             create_cypher = f"""
 CREATE (n:`{label}`)
 SET n += $props
 RETURN elementId(n) AS id, labels(n) AS labels, properties(n) AS props
 """
-            rec = session.run(create_cypher, props=props).single()
+            try:
+                rec = session.run(create_cypher, props=props).single()
+            except ClientError as e:
+                code = str(getattr(e, "code", "") or "")
+                if "ConstraintValidationFailed" in code:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="创建节点失败：命中 Neo4j 唯一约束（同名冲突）。请检查图数据库中的 name 唯一约束配置。",
+                    )
+                raise
             if not rec:
                 raise HTTPException(status_code=500, detail="创建节点失败")
 
             node_id = str(rec["id"])
+            node_props = dict(rec["props"] or {})
+            node_label = str((rec["labels"] or [label])[0])
             mutation_id = str(uuid.uuid4())
             log_item = {
                 "mutation_id": mutation_id,
                 "timestamp": _now_iso(),
                 "action": "create_node",
-                "target": {"node_id": node_id},
+                **op_meta,
+                "target": {
+                    "node_id": node_id,
+                    "node_name": str(node_props.get("name", "")),
+                    "node_label": node_label,
+                },
                 "request": payload.model_dump(),
                 "inverse": {"action": "delete_node", "node_id": node_id, "detach": True},
             }
             _append_graph_mutation_log(log_item)
 
-            node_props = dict(rec["props"] or {})
             return {
                 "success": True,
                 "id": node_id,
-                "type": (rec["labels"] or [label])[0],
+                "type": node_label,
                 "name": str(node_props.get("name", "")),
+                "deduplicated": False,
                 "mutation_id": mutation_id,
             }
     finally:
@@ -2523,7 +2648,10 @@ RETURN elementId(n) AS id, labels(n) AS labels, properties(n) AS props
 
 
 @app.put("/graph/node/{node_id}")
-async def update_graph_node(node_id: str, payload: GraphNodeUpdateRequest):
+async def update_graph_node(node_id: str, payload: GraphNodeUpdateRequest, request: Request):
+    from neo4j.exceptions import ClientError
+
+    op_meta = _resolve_operation_meta(request, fallback_type="update_node")
     driver = _neo4j_driver()
     try:
         _db = os.getenv("NEO4J_DATABASE", "machining")
@@ -2568,16 +2696,34 @@ SET n:`{new_label}`
 SET n = $next_props
 RETURN elementId(n) AS id, labels(n) AS labels, properties(n) AS props
 """
-            rec = session.run(update_cypher, node_id=node_id, next_props=next_props).single()
+            try:
+                rec = session.run(update_cypher, node_id=node_id, next_props=next_props).single()
+            except ClientError as e:
+                code = str(getattr(e, "code", "") or "")
+                if "ConstraintValidationFailed" in code:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="更新节点失败：命中 Neo4j 唯一约束（同名冲突）。请检查图数据库中的 name 唯一约束配置。",
+                    )
+                raise
             if not rec:
                 raise HTTPException(status_code=500, detail="更新节点失败")
 
+            updated_props = dict(rec["props"] or {})
+            updated_labels = [str(x) for x in (rec["labels"] or []) if str(x).strip()]
             mutation_id = str(uuid.uuid4())
             log_item = {
                 "mutation_id": mutation_id,
                 "timestamp": _now_iso(),
                 "action": "update_node",
-                "target": {"node_id": node_id},
+                **op_meta,
+                "target": {
+                    "node_id": node_id,
+                    "node_name_before": str(old_props.get("name", "")),
+                    "node_name_after": str(updated_props.get("name", "")),
+                    "node_label_before": (old_labels[0] if old_labels else "Generic"),
+                    "node_label_after": (updated_labels[0] if updated_labels else new_label),
+                },
                 "request": payload.model_dump(),
                 "inverse": {
                     "action": "restore_node_state",
@@ -2588,7 +2734,7 @@ RETURN elementId(n) AS id, labels(n) AS labels, properties(n) AS props
             }
             _append_graph_mutation_log(log_item)
 
-            props = dict(rec["props"] or {})
+            props = updated_props
             return {
                 "success": True,
                 "id": str(rec["id"]),
@@ -2601,7 +2747,8 @@ RETURN elementId(n) AS id, labels(n) AS labels, properties(n) AS props
 
 
 @app.delete("/graph/node/{node_id}")
-async def delete_graph_node(node_id: str, detach: bool = True):
+async def delete_graph_node(node_id: str, request: Request, detach: bool = True):
+    op_meta = _resolve_operation_meta(request, fallback_type="delete_node")
     driver = _neo4j_driver()
     try:
         _db = os.getenv("NEO4J_DATABASE", "machining")
@@ -2656,7 +2803,12 @@ DELETE n
                 "mutation_id": mutation_id,
                 "timestamp": _now_iso(),
                 "action": "delete_node",
-                "target": {"node_id": node_id},
+                **op_meta,
+                "target": {
+                    "node_id": node_id,
+                    "node_name": str(props.get("name", "")),
+                    "node_label": (labels[0] if labels else "Generic"),
+                },
                 "request": {"detach": detach},
                 "inverse": {
                     "action": "recreate_node",
@@ -2677,13 +2829,14 @@ DELETE n
 
 
 @app.post("/graph/edge")
-async def create_graph_edge(payload: GraphEdgeCreateRequest):
+async def create_graph_edge(payload: GraphEdgeCreateRequest, request: Request):
     from_id = str(payload.from_node_id or payload.from_id or "").strip()
     to_id = str(payload.to_node_id or payload.to_id or "").strip()
     rel_type = _safe_rel_type(payload.type)
     if not from_id or not to_id:
         raise HTTPException(status_code=400, detail="from_id / to_id 不能为空")
 
+    op_meta = _resolve_operation_meta(request, fallback_type="create_edge")
     rel_props = dict(payload.properties or {})
     driver = _neo4j_driver()
     try:
@@ -2695,7 +2848,11 @@ MATCH (a) WHERE elementId(a) = $from_id
 MATCH (b) WHERE elementId(b) = $to_id
 CREATE (a)-[r:`{rel_type}`]->(b)
 SET r += $rel_props
-RETURN elementId(r) AS rel_id
+RETURN elementId(r) AS rel_id,
+       COALESCE(a.name, '') AS from_name,
+       COALESCE(b.name, '') AS to_name,
+       labels(a)[0] AS from_label,
+       labels(b)[0] AS to_label
 """,
                 from_id=from_id,
                 to_id=to_id,
@@ -2710,7 +2867,17 @@ RETURN elementId(r) AS rel_id
                 "mutation_id": mutation_id,
                 "timestamp": _now_iso(),
                 "action": "create_edge",
-                "target": {"rel_id": rel_id, "from_id": from_id, "to_id": to_id, "type": rel_type},
+                **op_meta,
+                "target": {
+                    "rel_id": rel_id,
+                    "from_id": from_id,
+                    "to_id": to_id,
+                    "type": rel_type,
+                    "from_name": str(rec.get("from_name") or ""),
+                    "to_name": str(rec.get("to_name") or ""),
+                    "from_label": str(rec.get("from_label") or ""),
+                    "to_label": str(rec.get("to_label") or ""),
+                },
                 "request": payload.model_dump(),
                 "inverse": {"action": "delete_edge", "rel_id": rel_id},
             }
@@ -2729,11 +2896,12 @@ RETURN elementId(r) AS rel_id
 
 
 @app.delete("/graph/edge/{rel_id}")
-async def delete_graph_edge(rel_id: str):
+async def delete_graph_edge(rel_id: str, request: Request):
     rel_id = str(rel_id or "").strip()
     if not rel_id:
         raise HTTPException(status_code=400, detail="rel_id 不能为空")
 
+    op_meta = _resolve_operation_meta(request, fallback_type="delete_edge")
     driver = _neo4j_driver()
     try:
         _db = os.getenv("NEO4J_DATABASE", "machining")
@@ -2745,6 +2913,10 @@ WHERE elementId(r) = $rel_id
 RETURN elementId(r) AS rel_id,
        elementId(a) AS from_id,
        elementId(b) AS to_id,
+       COALESCE(a.name, '') AS from_name,
+       COALESCE(b.name, '') AS to_name,
+       labels(a)[0] AS from_label,
+       labels(b)[0] AS to_label,
        type(r) AS rel_type,
        properties(r) AS rel_props
 LIMIT 1
@@ -2774,7 +2946,17 @@ DELETE r
                 "mutation_id": mutation_id,
                 "timestamp": _now_iso(),
                 "action": "delete_edge",
-                "target": {"rel_id": rel_id, "from_id": from_id, "to_id": to_id, "type": rel_type},
+                **op_meta,
+                "target": {
+                    "rel_id": rel_id,
+                    "from_id": from_id,
+                    "to_id": to_id,
+                    "type": rel_type,
+                    "from_name": str(snapshot.get("from_name") or ""),
+                    "to_name": str(snapshot.get("to_name") or ""),
+                    "from_label": str(snapshot.get("from_label") or ""),
+                    "to_label": str(snapshot.get("to_label") or ""),
+                },
                 "request": {"rel_id": rel_id},
                 "inverse": {
                     "action": "recreate_edge",
@@ -2800,21 +2982,39 @@ DELETE r
 
 @app.get("/graph/mutations", response_model=GraphMutationLogListResponse)
 async def list_graph_mutations(limit: int = 50):
-    items = _load_graph_mutation_logs(limit=limit)
+    items = [_decorate_mutation_log(x) for x in _load_graph_mutation_logs(limit=limit)]
     return GraphMutationLogListResponse(total=len(items), items=items)
 
 
 @app.post("/graph/mutations/{mutation_id}/rollback", response_model=GraphMutationRollbackResponse)
-async def rollback_graph_mutation(mutation_id: str):
+async def rollback_graph_mutation(mutation_id: str, request: Request):
     row = _find_graph_mutation(mutation_id)
     if not row:
         raise HTTPException(status_code=404, detail="mutation 记录不存在")
+    if str(row.get("action") or "").strip() == "rollback":
+        raise HTTPException(status_code=400, detail="回滚记录不可再次回滚")
+
+    all_rows = _load_all_graph_mutation_logs()
+    rolled_back_ids = _collect_rolled_back_source_ids(all_rows)
+    if mutation_id in rolled_back_ids:
+        return GraphMutationRollbackResponse(
+            rolled_back=False,
+            message="该 mutation 已回滚，无需重复执行",
+            mutation_id=mutation_id,
+            rollback_id=None,
+            details={},
+        )
 
     inverse = dict(row.get("inverse") or {})
     action = str(inverse.get("action") or "").strip()
     if not action:
         raise HTTPException(status_code=400, detail="mutation 缺少 inverse 信息")
 
+    rollback_meta = _resolve_operation_meta(
+        request,
+        fallback_type="rollback_single",
+        fallback_group_id=f"rollback:{mutation_id}",
+    )
     driver = _neo4j_driver()
     rollback_id = str(uuid.uuid4())
     try:
@@ -2944,7 +3144,12 @@ RETURN elementId(r) AS rel_id
             "mutation_id": rollback_id,
             "timestamp": _now_iso(),
             "action": "rollback",
-            "target": {"source_mutation_id": mutation_id},
+            **rollback_meta,
+            "target": {
+                "source_mutation_id": mutation_id,
+                "source_action": str(row.get("action") or ""),
+                "source_operation_group_id": str(row.get("operation_group_id") or ""),
+            },
             "request": {"inverse_action": action},
             "inverse": {},
             "details": details,
@@ -2960,6 +3165,77 @@ RETURN elementId(r) AS rel_id
         )
     finally:
         driver.close()
+
+
+@app.post("/graph/mutations/{group_id}/rollback-group", response_model=GraphMutationRollbackGroupResponse)
+async def rollback_graph_mutation_group(group_id: str, request: Request):
+    gid = str(group_id or "").strip()
+    if not gid:
+        raise HTTPException(status_code=400, detail="group_id 不能为空")
+
+    all_rows = _load_all_graph_mutation_logs()
+    if not all_rows:
+        return GraphMutationRollbackGroupResponse(
+            group_id=gid,
+            requested=0,
+            rolled_back=0,
+            skipped=0,
+            failed=0,
+            rollback_ids=[],
+            message="无可回滚记录",
+        )
+
+    candidates = [
+        row for row in all_rows
+        if str(row.get("operation_group_id") or "").strip() == gid
+        and str(row.get("action") or "").strip() != "rollback"
+    ]
+    if not candidates:
+        return GraphMutationRollbackGroupResponse(
+            group_id=gid,
+            requested=0,
+            rolled_back=0,
+            skipped=0,
+            failed=0,
+            rollback_ids=[],
+            message="该分组无可回滚 mutation",
+        )
+
+    requested = len(candidates)
+    rolled_back = 0
+    skipped = 0
+    failed = 0
+    rollback_ids: List[str] = []
+
+    # 逆序回滚：先撤销后执行的动作，避免依赖顺序导致的中间态错误
+    for row in reversed(candidates):
+        mid = str(row.get("mutation_id") or "").strip()
+        if not mid:
+            failed += 1
+            continue
+        try:
+            result = await rollback_graph_mutation(mid, request)
+            if result.rolled_back:
+                rolled_back += 1
+                if result.rollback_id:
+                    rollback_ids.append(str(result.rollback_id))
+            else:
+                skipped += 1
+        except HTTPException:
+            failed += 1
+        except Exception:
+            failed += 1
+
+    return GraphMutationRollbackGroupResponse(
+        group_id=gid,
+        requested=requested,
+        rolled_back=rolled_back,
+        skipped=skipped,
+        failed=failed,
+        rollback_ids=rollback_ids,
+        message=f"组回滚完成：成功 {rolled_back}，跳过 {skipped}，失败 {failed}",
+    )
+
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
