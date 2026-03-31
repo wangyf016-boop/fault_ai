@@ -1,4 +1,4 @@
-"""
+﻿"""
 FastAPI Server with LangGraph Routing
 LangChain 生态标准结构
 """
@@ -3794,7 +3794,7 @@ async def search_graph_by_records(req: RecordSearchRequest):
     question_component = _resolve_component_by_dictionary(question_text, component_dict) if question_text else ""
     question_problem = _extract_question_problem_keyword(question_text)
     query_mode = str(req.query_mode or "exact").strip().lower()
-      is_exact_mode = query_mode == "exact"
+    is_exact_mode = query_mode == "exact"
     strict_exact_mode = bool(req.strict_only and is_exact_mode)
     strict_component_mode = bool(strict_exact_mode and question_component)
     strict_problem_mode = bool(strict_exact_mode and question_problem)
