@@ -3794,9 +3794,10 @@ async def search_graph_by_records(req: RecordSearchRequest):
     question_component = _resolve_component_by_dictionary(question_text, component_dict) if question_text else ""
     question_problem = _extract_question_problem_keyword(question_text)
     query_mode = str(req.query_mode or "exact").strip().lower()
-    is_exact_mode = query_mode == "exact"
-    strict_component_mode = bool(req.strict_only and is_exact_mode and question_component)
-    strict_problem_mode = bool(req.strict_only and is_exact_mode and question_problem)
+      is_exact_mode = query_mode == "exact"
+    strict_exact_mode = bool(req.strict_only and is_exact_mode)
+    strict_component_mode = bool(strict_exact_mode and question_component)
+    strict_problem_mode = bool(strict_exact_mode and question_problem)
     if question_component:
         print(f"[records-paths] question component 命中: {question_component} (mode={query_mode})")
     if question_problem:
@@ -3990,11 +3991,12 @@ RETURN DISTINCT (node_sig + '#' + rel_sig) AS sig
                 prob_variants = _graph_field_variants(prob_val) if prob_val else []
                 cause_variants = _graph_field_variants(cau_val) if cau_val else []
 
-                # 精确模式：component 固定为 question component 等值匹配，禁止 contains 扩散
-                if strict_component_mode:
-                    comp_variants = [(question_component, '=')] if question_component else []
-                if strict_problem_mode:
-                    prob_variants = [(question_problem, '=')] if question_problem else []
+                # 精确模式：优先等值匹配 component，避免退化到 contains 扩散
+                if strict_exact_mode:
+                    exact_component = question_component or comp_val
+                    comp_variants = [(exact_component, '=')] if exact_component else []
+                    if strict_problem_mode:
+                        prob_variants = [(question_problem, '=')] if question_problem else []
 
                 def _tune_component_variants(raw_comp_text: str, base: List[tuple]) -> List[tuple]:
                     """对“螺纹”类部件收紧匹配，避免泛词（如“加工”）把路径拉偏。"""
@@ -4026,7 +4028,8 @@ RETURN DISTINCT (node_sig + '#' + rel_sig) AS sig
 
                     return out or base
 
-                comp_variants = _tune_component_variants(comp_val, comp_variants)
+                if not strict_exact_mode:
+                    comp_variants = _tune_component_variants(comp_val, comp_variants)
 
                 def _augment_problem_variants(raw_prob_text: str, base: List[tuple]) -> List[tuple]:
                     """扩展问题检索词，处理现场描述与图谱问题节点词面不一致（如“椭圆”→“超差”）。"""
@@ -4062,7 +4065,8 @@ RETURN DISTINCT (node_sig + '#' + rel_sig) AS sig
                             out.append(it)
                     return out
 
-                prob_variants = _augment_problem_variants(prob_val, prob_variants)
+                if not strict_exact_mode:
+                    prob_variants = _augment_problem_variants(prob_val, prob_variants)
 
                 def _pick_variants(vs: List[tuple], head: int = 4, tail: int = 3) -> List[tuple]:
                     """保留前置高精度变体，同时补充尾部短词变体，避免关键短词被切片丢失。"""
@@ -4080,8 +4084,8 @@ RETURN DISTINCT (node_sig + '#' + rel_sig) AS sig
                 prob_pick = _pick_variants(prob_variants, head=4, tail=4)
                 cause_pick = _pick_variants(cause_variants, head=3, tail=3)
 
-                # 精确模式 + question component 命中：禁止无 component 的 trial
-                if strict_component_mode:
+                # 精确模式：禁止无 component 的 trial，避免扩散到无关路径
+                if strict_exact_mode:
                     if not comp_pick:
                         continue
                     if prob_pick and cause_pick:

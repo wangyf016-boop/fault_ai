@@ -355,6 +355,16 @@ const ChatPage = () => {
     const handleSendMessage = async (text, options = {}) => {
         const queryMode = options?.queryMode || 'auto';
         const draftSessionId = isLocalDraftSession(activeSessionId) ? activeSessionId : null;
+        // Fallback: send latest records so follow-up can still work on stateless backend nodes.
+        const latestFollowupRecords = (() => {
+            for (let i = messages.length - 1; i >= 0; i -= 1) {
+                const recs = messages[i]?.qdrantRecords;
+                if (Array.isArray(recs) && recs.length > 0) {
+                    return recs.slice(0, 80);
+                }
+            }
+            return null;
+        })();
         console.log('[handleSendMessage] 开始发送:', text.substring(0, 50));
         
         // 设置锁定：未来5秒内不允许 loadMessages 覆盖消息
@@ -401,6 +411,7 @@ const ChatPage = () => {
                 message: text,
                 conversationId: activeSessionId,
                 queryMode,
+                followupRecords: latestFollowupRecords,
                 stream: true,
                 onMeta: (meta) => {
                     console.log('[UI-V2][meta]', {

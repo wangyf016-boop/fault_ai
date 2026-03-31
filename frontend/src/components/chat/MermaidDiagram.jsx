@@ -118,9 +118,9 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
         .filter((b) => b.cause || b.steps.length > 0)
         .slice(0, 4);
 
-    const specMode = String(spec?.mode || '').trim();
-    const branchModeFlag = specMode || String(flowPlan?.branch_mode || 'single');
-    const branchMode = (branchModeFlag === 'by_cause' && causeBranches.length > 1) ? 'by_cause' : 'single';
+    const modeToken = String(spec?.mode || flowPlan?.branch_mode || '').trim().toLowerCase();
+    const byCauseHints = new Set(['by_cause', 'bycause', 'branch', 'branches', 'cause', 'multi_branch']);
+    const branchMode = (causeBranches.length > 0 || byCauseHints.has(modeToken)) ? 'by_cause' : 'single';
 
     let code = 'flowchart TD\n';
     // 故障现象节点
@@ -135,7 +135,7 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
     const firstLink = likelyCause ? 'LC' : 'P';
 
     // 按原因分支：融合失败或分歧较大时，从原因层开始分支
-    if (branchMode === 'by_cause') {
+    if (branchMode === 'by_cause' && causeBranches.length > 0) {
         code += `    D{"原因分支判断"}\n`;
         code += `    ${firstLink} --> D\n`;
 
@@ -175,28 +175,27 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
     }
 
     if (steps.length > 0) {
+        let prev = firstLink;
         steps.forEach((s, i) => {
             const sid = `S${i + 1}`;
-            const yid = `Y${i + 1}`;
 
-            // 排查步骤节点（矩形）
-            code += `    ${sid}["第${i + 1}步:<br/>${formatLabel(truncate(s.check, 20, 3))}"]\n`;
+            // Main step node in linear flow.
+            code += `    ${sid}["Step ${i + 1}:<br/>${formatLabel(truncate(s.check, 20, 3))}"]\n`;
 
-            // 连接上一步
-            if (i === 0) {
-                code += `    ${firstLink} --> ${sid}\n`;
-            } else {
-                code += `    S${i} -->|正常| ${sid}\n`;
+            // Link from previous node to current step.
+            code += `    ${prev} --> ${sid}\n`;
+            prev = sid;
+
+            // Optional action node after each step.
+            const actionText = normalizeStepText(s.yesAction || s.noAction || '');
+            if (actionText) {
+                const aid = `A${i + 1}`;
+                code += `    ${aid}["Action:<br/>${formatLabel(truncate(actionText, 16, 3))}"]\n`;
+                code += `    ${prev} --> ${aid}\n`;
+                prev = aid;
             }
-
-            // 异常处置分支（始终显示，无 yesAction 时用通用文案）
-            const actionText = normalizeStepText(s.yesAction || '执行对应处置');
-            code += `    ${yid}["处置:<br/>${formatLabel(truncate(actionText, 14, 3))}"]\n`;
-            code += `    ${sid} -->|异常| ${yid}\n`;
-            code += `    ${yid} --> V\n`;
         });
-        // 最后一步正常也到验证
-        code += `    S${steps.length} -->|正常| V\n`;
+        code += `    ${prev} --> V\n`;
     } else {
         code += `    ${firstLink} --> V\n`;
     }
@@ -209,7 +208,9 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
     if (likelyCause) code += '    style LC fill:#fef3c7,stroke:#f59e0b,stroke-width:2px\n';
     steps.forEach((s, i) => {
         code += `    style S${i + 1} fill:#dbeafe,stroke:#3b82f6,stroke-width:2px\n`;
-        code += `    style Y${i + 1} fill:#fef3c7,stroke:#f59e0b,stroke-width:1.5px\n`;
+        if (normalizeStepText(s.yesAction || s.noAction || '')) {
+            code += `    style A${i + 1} fill:#fef3c7,stroke:#f59e0b,stroke-width:1.5px\n`;
+        }
     });
     code += '    style V fill:#d1fae5,stroke:#10b981,stroke-width:2px\n';
     return code;
