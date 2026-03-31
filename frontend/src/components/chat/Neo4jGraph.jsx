@@ -1484,7 +1484,11 @@ export default function Neo4jGraph({
       throw new Error(`新增节点失败: ${res.status}`);
     }
     const data = await res.json().catch(() => ({}));
-    return { localOnly: false, nodeId: data?.id ? String(data.id) : null };
+    return {
+      localOnly: false,
+      nodeId: data?.id ? String(data.id) : null,
+      deduplicated: Boolean(data?.deduplicated),
+    };
   }, [fetchWithTimeout]);
 
   const persistEdgeCreate = useCallback(async (payload, operationGroupId = '', operationType = '') => {
@@ -1579,12 +1583,16 @@ export default function Neo4jGraph({
     try {
       const createResult = await persistNodeCreate({ type, name, description });
       let finalNodeId = tempNodeId;
+      const deduplicated = Boolean(createResult?.deduplicated);
 
       if (!createResult.localOnly && createResult.nodeId && createResult.nodeId !== tempNodeId) {
         finalNodeId = createResult.nodeId;
         const replacedNode = { ...newNode, id: finalNodeId, rawData: { ...(newNode.rawData || {}), id: finalNodeId } };
         nodesDataSet.current?.remove(tempNodeId);
-        nodesDataSet.current?.add(replacedNode);
+        const existingNode = nodesDataSet.current?.get(finalNodeId);
+        if (!existingNode) {
+          nodesDataSet.current?.add(replacedNode);
+        }
 
         if (newEdge) {
           edgesDataSet.current?.remove(newEdge.id);
@@ -1593,12 +1601,22 @@ export default function Neo4jGraph({
             id: `${fromNodeId}-${relationType}-${finalNodeId}`,
             to: finalNodeId,
           };
-          edgesDataSet.current?.add(replacedEdge);
-          setAllGraphEdges((prev) => prev.map((edge) => (String(edge.id) === String(newEdge.id) ? replacedEdge : edge)));
+          const existingEdge = edgesDataSet.current?.get(replacedEdge.id);
+          if (!existingEdge) {
+            edgesDataSet.current?.add(replacedEdge);
+            setAllGraphEdges((prev) => prev.map((edge) => (String(edge.id) === String(newEdge.id) ? replacedEdge : edge)));
+          } else {
+            setAllGraphEdges((prev) => prev.filter((edge) => String(edge.id) !== String(newEdge.id)));
+          }
         }
 
-        setAllGraphNodes((prev) => prev.map((node) => (String(node.id) === tempNodeId ? replacedNode : node)));
-        setSelectedNode(replacedNode);
+        if (existingNode) {
+          setAllGraphNodes((prev) => prev.filter((node) => String(node.id) !== tempNodeId));
+          setSelectedNode(existingNode);
+        } else {
+          setAllGraphNodes((prev) => prev.map((node) => (String(node.id) === tempNodeId ? replacedNode : node)));
+          setSelectedNode(replacedNode);
+        }
       }
 
       if (newEdge) {
@@ -1613,12 +1631,12 @@ export default function Neo4jGraph({
             setAllGraphEdges((prev) => prev.map((edge) => (String(edge.id) === oldEdgeId ? { ...edge, id: persistedEdgeId } : edge)));
           }
         }
-        if (edgeResult.localOnly || createResult.localOnly) {
+        if (edgeResult.localOnly || createResult.localOnly || deduplicated) {
           setMutationNotice({ type: 'warn', text: '节点已新增（当前为前端可视化结果，后端接口未完全开放）' });
         } else {
           setMutationNotice({ type: 'success', text: '节点与关系新增成功' });
         }
-      } else if (createResult.localOnly) {
+      } else if (createResult.localOnly || deduplicated) {
         setMutationNotice({ type: 'warn', text: '节点已新增（仅前端可视化）' });
       } else {
         setMutationNotice({ type: 'success', text: '节点新增成功' });
@@ -1693,16 +1711,10 @@ export default function Neo4jGraph({
           throw new Error('后端不支持按路径拆分，请改用全局修改');
         }
         const newNodeId = String(createResult.nodeId);
-        
-        // 如果是重复节点（自动去重），跳过后续的迁移操作
-        if (createResult.deduplicated) {
-          setMutationNotice({ type: 'info', text: `已整合至现有节点：${nextName}（自动去重）` });
+        const targetNodeReused = Boolean(createResult.deduplicated);
+        if (targetNodeReused && newNodeId === nodeId) {
+          setMutationNotice({ type: 'info', text: 'No path split applied: target node is the same as current node.' });
           setIsEditingNode(false);
-          if (useRecordsRoute) {
-            await loadGraphFromRecords(records, nodeLimit);
-          } else {
-            await loadGraphData(activeKeyword, nodeLimit, structuredFilters);
-          }
           return;
         }
 
@@ -1745,6 +1757,7 @@ export default function Neo4jGraph({
 
         setMutationNotice({ type: 'success', text: `按路径修改完成：已拆分节点并迁移 ${connectedPathEdges.length} 条关系` });
         setIsEditingNode(false);
+        if (embedded) EMBEDDED_GRAPH_CACHE.clear();
         if (useRecordsRoute) {
           await loadGraphFromRecords(records, nodeLimit);
         } else {
@@ -1803,6 +1816,7 @@ export default function Neo4jGraph({
     persistEdgeDelete,
     persistNodeDeleteWithDetach,
     persistNodeUpdate,
+    embedded,
     useRecordsRoute,
     records,
     nodeLimit,
@@ -2148,6 +2162,7 @@ useEffect(() => {
     setError(null);
     setMutationNotice({ type: 'info', text: '正在刷新图谱...' });
     try {
+      if (embedded) EMBEDDED_GRAPH_CACHE.clear();
       if (useRecordsRoute) {
         await loadGraphFromRecords(records, nodeLimit);
       } else {
@@ -2158,7 +2173,7 @@ useEffect(() => {
     } catch (err) {
       setMutationNotice({ type: 'error', text: err.message || '刷新失败' });
     }
-  }, [useRecordsRoute, records, nodeLimit, activeKeyword, searchInput, structuredFilters, loadGraphFromRecords, loadGraphData]);
+  }, [embedded, useRecordsRoute, records, nodeLimit, activeKeyword, searchInput, structuredFilters, loadGraphFromRecords, loadGraphData]);
 
   const toggleNodeTypeFilter = useCallback((nodeType) => {
     const normalized = String(nodeType || '').trim();

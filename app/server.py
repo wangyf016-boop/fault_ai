@@ -2479,7 +2479,15 @@ LIMIT 1
 """
             exists_row = session.run(cypher, name=name).single()
             if exists_row:
-                raise HTTPException(status_code=409, detail=f"同类型同名节点已存在: {name}")
+                # 同类型同名节点已存在时，直接复用已有节点，避免前端重复创建报 409。
+                return {
+                    "success": True,
+                    "id": str(exists_row["id"]),
+                    "type": label,
+                    "name": name,
+                    "deduplicated": True,
+                    "mutation_id": None,
+                }
 
             create_cypher = f"""
 CREATE (n:`{label}`)
