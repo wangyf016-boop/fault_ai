@@ -49,7 +49,7 @@ cleanup_pid_file() {
   local pid=""
   pid="$(read_pid_file "${pid_file}")"
 
-  if [[ -f "${pid_file}" && ! is_pid_running "${pid}" ]]; then
+  if [[ -f "${pid_file}" ]] && ! is_pid_running "${pid}"; then
     rm -f "${pid_file}"
   fi
 }

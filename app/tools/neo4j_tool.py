@@ -1302,12 +1302,13 @@ def get_neo4j_rag_tool(ollama_model: str | None = None, ollama_base_url: str | N
             temperature=0,
         )
     else:
-        from langchain_community.chat_models import ChatOllama
+        from langchain_ollama import ChatOllama
 
         llm = ChatOllama(
             model=model,
             base_url=base_url,
             temperature=0,  # 设为0确保一致性输出
+            reasoning=False,
             num_predict=2048,
             repeat_penalty=1.1,
         )
