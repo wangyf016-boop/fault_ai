@@ -44,7 +44,7 @@ const SettingsPage = () => {
             const data = await getLLMConfig();
             setConfig(data);
         } catch (err) {
-            setMessage({ type: 'error', text: '加载配置失败: ' + err.message });
+            setMessage({ type: 'error', text: 'Failed to load configuration: ' + err.message });
         } finally {
             setLoading(false);
         }
@@ -56,7 +56,7 @@ const SettingsPage = () => {
             const data = await getPromptsConfig();
             setPrompts(data);
         } catch (err) {
-            setPromptsMessage({ type: 'error', text: '加载提示词失败: ' + err.message });
+            setPromptsMessage({ type: 'error', text: 'Failed to load prompts: ' + err.message });
         } finally {
             setPromptsLoading(false);
         }
@@ -72,9 +72,9 @@ const SettingsPage = () => {
                 ollama_base_url: config.ollama_base_url,
                 ollama_model: config.ollama_model,
             }));
-            setMessage({ type: 'success', text: '配置已保存并立即生效（无需重启后端）' });
+            setMessage({ type: 'success', text: 'Configuration saved and applied immediately (no backend restart required)' });
         } catch (err) {
-            setMessage({ type: 'error', text: '保存失败: ' + err.message });
+            setMessage({ type: 'error', text: 'Save failed: ' + err.message });
         } finally {
             setSaving(false);
         }
@@ -87,12 +87,12 @@ const SettingsPage = () => {
             // 统一走后端 API 测试，避免 CORS 问题
             const result = await testLLMConnection(config);
             if (result.success) {
-                setMessage({ type: 'success', text: result.response || '连接成功' });
+                setMessage({ type: 'success', text: result.response || 'Connection successful' });
             } else {
-                setMessage({ type: 'error', text: `连接失败: ${result.error}` });
+                setMessage({ type: 'error', text: `Connection failed: ${result.error}` });
             }
         } catch (err) {
-            setMessage({ type: 'error', text: '测试失败: ' + err.message });
+            setMessage({ type: 'error', text: 'Test failed: ' + err.message });
         } finally {
             setTesting(false);
         }
@@ -112,24 +112,24 @@ const SettingsPage = () => {
         try {
             setPromptsSaving(true);
             await savePromptsConfig(prompts);
-            setPromptsMessage({ type: 'success', text: '提示词配置已保存' });
+            setPromptsMessage({ type: 'success', text: 'Prompt configuration saved' });
         } catch (err) {
-            setPromptsMessage({ type: 'error', text: '保存失败: ' + err.message });
+            setPromptsMessage({ type: 'error', text: 'Save failed: ' + err.message });
         } finally {
             setPromptsSaving(false);
         }
     };
 
     const handlePromptsReset = async () => {
-        if (!window.confirm('确定要重置为默认提示词吗？')) return;
+        if (!window.confirm('Are you sure you want to reset to default prompts?')) return;
         try {
             setPromptsResetting(true);
             await resetPromptsConfig();
             const nextPrompts = await getPromptsConfig();
             setPrompts(nextPrompts);
-            setPromptsMessage({ type: 'success', text: '已重置为默认提示词' });
+            setPromptsMessage({ type: 'success', text: 'Reset to default prompts' });
         } catch (err) {
-            setPromptsMessage({ type: 'error', text: '重置失败: ' + err.message });
+            setPromptsMessage({ type: 'error', text: 'Reset failed: ' + err.message });
         } finally {
             setPromptsResetting(false);
         }

@@ -64,7 +64,7 @@ const DatasetPage = () => {
                 return next;
             });
         } catch (err) {
-            setError(err.message || '操作失败');
+            setError(err.message || 'Operation failed');
         }
     };
 
@@ -80,7 +80,7 @@ const DatasetPage = () => {
             const { chunks } = await getCollectionChunks(dataset.name, { limit: 6 });
             setPreviewChunks(chunks || []);
         } catch (err) {
-            setPreviewError(err.message || '无法加载切片预览');
+            setPreviewError(err.message || 'Unable to load chunk preview');
         } finally {
             setPreviewLoading(false);
         }
@@ -103,7 +103,7 @@ const DatasetPage = () => {
             await deleteCollection(name);
             fetchCollections(); // 刷新列表
         } catch (err) {
-            setError(err.message || '删除失败');
+            setError(err.message || 'Delete failed');
         }
     };
 

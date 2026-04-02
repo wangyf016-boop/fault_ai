@@ -161,7 +161,7 @@ export const sendMessage = async ({ message, conversationId, queryMode = 'auto',
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error('请求超时，请重试');
+      throw new Error('Request timed out, please try again.');
     }
     throw error;
   }

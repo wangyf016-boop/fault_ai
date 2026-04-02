@@ -49,12 +49,12 @@ const generateGraphData = (records) => {
     // 处理每条记录 - 匹配Neo4j的Problem/Cause/Solution结构
     records.forEach((record, idx) => {
         // 从record中提取相关信息
-        const problem = record.problem || record.description || record.phenomenon || '未知问题';
+        const problem = record.problem || record.description || record.phenomenon || 'Unknown problem';
         const cause = record.cause || record.root_cause || '';
         const solution = record.action || record.solution || record.containment_action || '';
         
         // 只有当有实际内容时才创建节点
-        if (problem && problem !== '-' && problem !== '未知问题') {
+        if (problem && problem !== '-' && problem !== 'Unknown problem') {
             const problemId = `problem_${idx}`;
             addNode(problemId, problem, 0, 40, { type: 'Problem' });
             
@@ -74,7 +74,7 @@ const generateGraphData = (records) => {
             
             // 添加设备节点（Version2 用 equipment 替代 station）
             const station = record.station || record.equipment || record.station_name || '';
-            if (station && String(station).trim() !== '' && String(station) !== '未知工位') {
+            if (station && String(station).trim() !== '' && String(station) !== 'Unknown station') {
                 const equipId = `equipment_${String(station).replace(/\s+/g, '_')}`;
                 addNode(equipId, String(station), 4, 30, { type: 'Equipment' });
                 addLink(equipId, problemId, 'HAS_FAULT');
@@ -92,7 +92,7 @@ const generateGraphData = (records) => {
     return { nodes, links };
 };
 
-const KnowledgeGraph = ({ records, title = "知识图谱", defaultExpanded = false }) => {
+const KnowledgeGraph = ({ records, title = "Knowledge Graph", defaultExpanded = false }) => {
     const [expanded, setExpanded] = useState(defaultExpanded);
     const [fullscreen, setFullscreen] = useState(false);
     
@@ -116,7 +116,7 @@ const KnowledgeGraph = ({ records, title = "知识图谱", defaultExpanded = fal
             formatter: (params) => {
                 if (params.dataType === 'node') {
                     return `<div style="max-width: 300px; word-wrap: break-word;">
-                        <strong>${categories[params.data.category]?.name || '节点'}</strong><br/>
+                        <strong>${categories[params.data.category]?.name || 'Node'}</strong><br/>
                         ${params.data.fullName || params.data.name}
                     </div>`;
                 }
@@ -188,14 +188,14 @@ const KnowledgeGraph = ({ records, title = "知识图谱", defaultExpanded = fal
                     className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors"
                 >
                     <Network size={16} />
-                    {title} ({graphData.nodes.length} 节点, {graphData.links.length} 关系)
+                    {title} ({graphData.nodes.length} nodes, {graphData.links.length} edges)
                 </button>
                 <div className="flex items-center gap-1">
                     {expanded && (
                         <button
                             onClick={() => setFullscreen(!fullscreen)}
                             className="p-1 hover:bg-muted rounded transition-colors"
-                            title={fullscreen ? '退出全屏' : '全屏'}
+                            title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                         >
                             {fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         </button>
@@ -204,7 +204,7 @@ const KnowledgeGraph = ({ records, title = "知识图谱", defaultExpanded = fal
                         <button
                             onClick={() => { setFullscreen(false); setExpanded(false); }}
                             className="p-1 hover:bg-muted rounded transition-colors"
-                            title="关闭"
+                            title="Close"
                         >
                             <X size={16} />
                         </button>
@@ -230,7 +230,7 @@ const KnowledgeGraph = ({ records, title = "知识图谱", defaultExpanded = fal
                     onClick={() => setExpanded(true)}
                     className="w-full py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
                 >
-                    点击展开知识图谱
+                    Click to expand knowledge graph
                 </button>
             )}
         </div>

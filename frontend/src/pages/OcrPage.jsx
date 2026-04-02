@@ -27,7 +27,7 @@ const OcrPage = () => {
             const data = await getOcrTasks();
             setTasks(data.tasks || []);
         } catch (err) {
-            console.error('加载任务失败:', err);
+            console.error('Failed to load OCR tasks:', err);
             setTasks([]);
         }
     }, []);
@@ -39,7 +39,7 @@ const OcrPage = () => {
             const data = await getOcrResults();
             setResults(data.results || []);
         } catch (err) {
-            console.error('加载结果失败:', err);
+            console.error('Failed to load OCR results:', err);
             setResults([]);
         } finally {
             setLoading(false);
@@ -68,7 +68,7 @@ const OcrPage = () => {
                         hasCompleted = true;
                     }
                 } catch (err) {
-                    console.error('获取任务状态失败:', err);
+                    console.error('Failed to get task status:', err);
                 }
             }
             // 有任务完成时刷新结果列表
@@ -91,8 +91,8 @@ const OcrPage = () => {
             const newTasks = result.tasks || [];
             setTasks(prev => [...newTasks, ...prev]);
         } catch (err) {
-            console.error('上传失败:', err);
-            setError(err.message || '上传失败，请检查后端服务是否运行');
+            console.error('Upload failed:', err);
+            setError(err.message || 'Upload failed. Please check whether the backend service is running.');
         } finally {
             setUploading(false);
         }
@@ -104,33 +104,33 @@ const OcrPage = () => {
             await deleteOcrTask(task.id);
             setTasks(prev => prev.filter(t => t.id !== task.id));
         } catch (err) {
-            console.error('删除任务失败:', err);
+            console.error('Failed to delete task:', err);
         }
     };
 
     // 删除结果
     const handleDeleteResult = async (result) => {
-        if (!confirm(`确定要删除 "${result.filename}" 的记录吗？`)) return;
+        if (!confirm(`Are you sure you want to delete the record for "${result.filename}"?`)) return;
         
         try {
             await deleteOcrResult(result.id);
             setResults(prev => prev.filter(r => r.id !== result.id));
         } catch (err) {
-            console.error('删除失败:', err);
-            setError('删除失败');
+            console.error('Delete failed:', err);
+            setError('Delete failed');
         }
     };
 
     // 清空所有结果
     const handleClearAll = async () => {
-        if (!confirm('确定要清空所有记录吗？')) return;
+        if (!confirm('Are you sure you want to clear all records?')) return;
         
         try {
             await clearOcrResults();
             setResults([]);
         } catch (err) {
-            console.error('清空失败:', err);
-            setError('清空失败');
+            console.error('Clear failed:', err);
+            setError('Clear failed');
         }
     };
 

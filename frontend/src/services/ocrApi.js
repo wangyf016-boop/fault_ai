@@ -15,7 +15,7 @@ export const uploadPdfForOcr = async (files) => {
     });
 
     if (!response.ok) {
-        throw new Error('上传失败');
+        throw new Error('Upload failed');
     }
 
     return response.json();
@@ -25,7 +25,7 @@ export const uploadPdfForOcr = async (files) => {
 export const getOcrTasks = async () => {
     const response = await fetch(`${API_BASE_URL}/api/ocr/tasks`);
     if (!response.ok) {
-        throw new Error('获取任务列表失败');
+        throw new Error('Failed to fetch task list');
     }
     return response.json();
 };
@@ -34,7 +34,7 @@ export const getOcrTasks = async () => {
 export const getOcrTaskStatus = async (taskId) => {
     const response = await fetch(`${API_BASE_URL}/api/ocr/status/${taskId}`);
     if (!response.ok) {
-        throw new Error('获取状态失败');
+        throw new Error('Failed to fetch status');
     }
     return response.json();
 };
@@ -45,7 +45,7 @@ export const deleteOcrTask = async (taskId) => {
         method: 'DELETE',
     });
     if (!response.ok) {
-        throw new Error('删除失败');
+        throw new Error('Delete failed');
     }
     return response.json();
 };
@@ -56,7 +56,7 @@ export const deleteOcrTask = async (taskId) => {
 export const getOcrResults = async () => {
     const response = await fetch(`${API_BASE_URL}/api/ocr/results`);
     if (!response.ok) {
-        throw new Error('获取结果列表失败');
+        throw new Error('Failed to fetch result list');
     }
     return response.json();
 };
@@ -65,7 +65,7 @@ export const getOcrResults = async () => {
 export const getOcrResult = async (resultId) => {
     const response = await fetch(`${API_BASE_URL}/api/ocr/results/${resultId}`);
     if (!response.ok) {
-        throw new Error('获取结果失败');
+        throw new Error('Failed to fetch result');
     }
     return response.json();
 };
@@ -76,7 +76,7 @@ export const deleteOcrResult = async (resultId) => {
         method: 'DELETE',
     });
     if (!response.ok) {
-        throw new Error('删除失败');
+        throw new Error('Delete failed');
     }
     return response.json();
 };
@@ -87,7 +87,7 @@ export const clearOcrResults = async () => {
         method: 'DELETE',
     });
     if (!response.ok) {
-        throw new Error('清空失败');
+        throw new Error('Clear failed');
     }
     return response.json();
 };

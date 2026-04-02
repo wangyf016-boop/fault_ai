@@ -2,9 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, StopCircle, MessageSquare } from 'lucide-react';
 
 const EXAMPLE_QUESTIONS = [
-    'PM17-A1的SP4刀塔监控报警怎么处理',
-    'XX41报警怎么处理',
-    '编码器的历史问题有哪些',
+    'How to resolve XX41 alarm?',
+    'What are the historical issues related to encoders?',
 ];
 
 const InputBox = ({ onSend, isLoading }) => {

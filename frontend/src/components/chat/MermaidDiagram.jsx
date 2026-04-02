@@ -55,12 +55,50 @@ const normalizeStepText = (text) => {
     return t;
 };
 
+const detectQueryLanguage = (text = '') => {
+    const t = String(text || '');
+    if (/[\u4e00-\u9fff]/.test(t)) return 'zh';
+    return 'en';
+};
 
-const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, queryText = '') => {
+const getDiagramLabels = (queryText = '') => {
+    const lang = detectQueryLanguage(queryText);
+    if (lang === 'zh') {
+        return {
+            problem: '故障现象',
+            likelyCause: '可能原因',
+            step: '步骤',
+            action: '处理动作',
+            verification: '验证',
+            causeBranchDecision: '原因分支判断',
+            cause: '原因',
+            branch: '分支',
+            handle: '处理',
+            branchFallbackStep: '执行对应处理',
+            fallbackNote: '暂未生成结构化流程，请重试',
+        };
+    }
+    return {
+        problem: 'Problem',
+        likelyCause: 'Likely Cause',
+        step: 'Step',
+        action: 'Action',
+        verification: 'Verification',
+        causeBranchDecision: 'Cause Branch Decision',
+        cause: 'Cause',
+        branch: 'Branch',
+        handle: 'Handle',
+        branchFallbackStep: 'Execute corresponding handling',
+        fallbackNote: 'Structured flow not generated yet, please retry',
+    };
+};
+
+
+const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, queryText = '', labels) => {
     const record = records?.[0] || {};
     const queryPhenomenon = extractPhenomenonFromQuery(queryText);
     const spec = flowPlan?.diagram_spec && typeof flowPlan.diagram_spec === 'object' ? flowPlan.diagram_spec : null;
-    const problem = queryPhenomenon || String(spec?.problem || '').trim() || record.problem || '当前问题';
+    const problem = queryPhenomenon || String(spec?.problem || '').trim() || record.problem || 'Current issue';
     const likelyCause = String(spec?.likely_cause || flowPlan?.likely_cause || '').trim();
 
     const rawSteps = Array.isArray(spec?.steps)
@@ -99,7 +137,7 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
         };
     }).filter((s) => s.check);
 
-    const verify = String(spec?.verify || flowPlan?.verify || '处理后连续复测通过').trim();
+    const verify = String(spec?.verify || flowPlan?.verify || 'Retest passed continuously after handling').trim();
 
     // 融合分支模式（后端增强字段）
     const rawBranches = Array.isArray(spec?.branches)
@@ -124,11 +162,11 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
 
     let code = 'flowchart TD\n';
     // 故障现象节点
-    code += `    P["问题:<br/>${formatLabel(truncate(problem, 20, 3))}"]\n`;
+    code += `    P["${labels.problem}:<br/>${formatLabel(truncate(problem, 20, 3))}"]\n`;
 
     // 可能原因节点
     if (likelyCause) {
-        code += `    LC["可能原因:<br/>${formatLabel(truncate(likelyCause, 20, 3))}"]\n`;
+        code += `    LC["${labels.likelyCause}:<br/>${formatLabel(truncate(likelyCause, 20, 3))}"]\n`;
         code += '    P --> LC\n';
     }
 
@@ -136,36 +174,36 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
 
     // 按原因分支：融合失败或分歧较大时，从原因层开始分支
     if (branchMode === 'by_cause' && causeBranches.length > 0) {
-        code += `    D{"原因分支判断"}\n`;
+        code += `    D{"${labels.causeBranchDecision}"}\n`;
         code += `    ${firstLink} --> D\n`;
 
         causeBranches.forEach((b, i) => {
             const cid = `C${i + 1}`;
-            const cLabel = b.cause || `原因${i + 1}`;
-            code += `    ${cid}["原因${i + 1}:<br/>${formatLabel(truncate(cLabel, 18, 3))}"]\n`;
-            code += `    D -->|分支${i + 1}| ${cid}\n`;
+            const cLabel = b.cause || `Cause ${i + 1}`;
+            code += `    ${cid}["${labels.cause} ${i + 1}:<br/>${formatLabel(truncate(cLabel, 18, 3))}"]\n`;
+            code += `    D -->|${labels.branch} ${i + 1}| ${cid}\n`;
 
-            const branchSteps = (b.steps.length > 0 ? b.steps : ['执行对应处置']).map((s) => normalizeStepText(s)).filter(Boolean);
+            const branchSteps = (b.steps.length > 0 ? b.steps : [labels.branchFallbackStep]).map((s) => normalizeStepText(s)).filter(Boolean);
             let prev = cid;
             branchSteps.forEach((st, j) => {
                 const sid = `B${i + 1}S${j + 1}`;
-                code += `    ${sid}["步骤${j + 1}:<br/>${formatLabel(truncate(st, 18, 3))}"]\n`;
+                code += `    ${sid}["${labels.step} ${j + 1}:<br/>${formatLabel(truncate(st, 18, 3))}"]\n`;
                 code += j === 0
-                    ? `    ${prev} -->|处置| ${sid}\n`
+                    ? `    ${prev} -->|${labels.handle}| ${sid}\n`
                     : `    ${prev} --> ${sid}\n`;
                 prev = sid;
             });
             code += `    ${prev} --> V\n`;
         });
 
-        code += `    V["验证:<br/>${formatLabel(truncate(verify, 20, 3))}"]\n`;
+        code += `    V["${labels.verification}:<br/>${formatLabel(truncate(verify, 20, 3))}"]\n`;
 
         code += '\n    style P fill:#fee2e2,stroke:#ef4444,stroke-width:2px\n';
         if (likelyCause) code += '    style LC fill:#fef3c7,stroke:#f59e0b,stroke-width:2px\n';
         code += '    style D fill:#e0e7ff,stroke:#6366f1,stroke-width:2px\n';
         causeBranches.forEach((b, i) => {
             code += `    style C${i + 1} fill:#fef3c7,stroke:#f59e0b,stroke-width:2px\n`;
-            const branchSteps = b.steps.length > 0 ? b.steps : ['执行对应处置'];
+            const branchSteps = b.steps.length > 0 ? b.steps : ['Execute corresponding handling'];
             branchSteps.forEach((_, j) => {
                 code += `    style B${i + 1}S${j + 1} fill:#dbeafe,stroke:#3b82f6,stroke-width:2px\n`;
             });
@@ -180,7 +218,7 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
             const sid = `S${i + 1}`;
 
             // Main step node in linear flow.
-            code += `    ${sid}["Step ${i + 1}:<br/>${formatLabel(truncate(s.check, 20, 3))}"]\n`;
+            code += `    ${sid}["${labels.step} ${i + 1}:<br/>${formatLabel(truncate(s.check, 20, 3))}"]\n`;
 
             // Link from previous node to current step.
             code += `    ${prev} --> ${sid}\n`;
@@ -190,7 +228,7 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
             const actionText = normalizeStepText(s.yesAction || s.noAction || '');
             if (actionText) {
                 const aid = `A${i + 1}`;
-                code += `    ${aid}["Action:<br/>${formatLabel(truncate(actionText, 16, 3))}"]\n`;
+                code += `    ${aid}["${labels.action}:<br/>${formatLabel(truncate(actionText, 16, 3))}"]\n`;
                 code += `    ${prev} --> ${aid}\n`;
                 prev = aid;
             }
@@ -201,7 +239,7 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
     }
 
     // 验证节点
-    code += `    V["验证:<br/>${formatLabel(truncate(verify, 20, 3))}"]\n`;
+    code += `    V["${labels.verification}:<br/>${formatLabel(truncate(verify, 20, 3))}"]\n`;
 
     // 样式
     code += '\n    style P fill:#fee2e2,stroke:#ef4444,stroke-width:2px\n';
@@ -220,6 +258,7 @@ const generateFlowPlanDrivenFlow = (records, flowPlan, truncate, formatLabel, qu
  * 从结构化 flowPlan 生成 Mermaid 流程图（仅保留新逻辑）
  */
 const generateMermaidCode = (records, flowPlan = null, userQuery = '') => {
+    const labels = getDiagramLabels(userQuery);
     // 清理节点文案中的 Markdown/噪声符号
     const sanitizeNodeText = (text) => {
         return String(text || '')
@@ -288,13 +327,13 @@ const generateMermaidCode = (records, flowPlan = null, userQuery = '') => {
         flowPlan.verify ||
         (flowPlan.diagram_spec && typeof flowPlan.diagram_spec === 'object')
     )) {
-        return generateFlowPlanDrivenFlow(records, flowPlan, truncate, formatLabel, userQuery);
+        return generateFlowPlanDrivenFlow(records, flowPlan, truncate, formatLabel, userQuery, labels);
     }
 
-    const problem = extractPhenomenonFromQuery(userQuery) || records?.[0]?.problem || '当前问题';
+    const problem = extractPhenomenonFromQuery(userQuery) || records?.[0]?.problem || 'Current issue';
     return `flowchart TD
-    P["问题:<br/>${formatLabel(truncate(problem, 20, 3))}"]
-    T["提示:<br/>结构化流程暂未生成，请重试"]
+    P["${labels.problem}:<br/>${formatLabel(truncate(problem, 20, 3))}"]
+    T["Note:<br/>${labels.fallbackNote}"]
     P --> T
 
     style P fill:#fee2e2,stroke:#ef4444,stroke-width:2px
@@ -619,7 +658,7 @@ const MermaidDiagram = ({ records, flowPlan = null, userQuery = '', onClose, inl
             } catch (err) {
                 console.error('Mermaid render error:', err);
                 if (!disposed && renderSeq === renderSeqRef.current) {
-                    setError('流程图渲染失败');
+                    setError('Flowchart rendering failed');
                 }
             }
         };
@@ -834,18 +873,18 @@ const MermaidDiagram = ({ records, flowPlan = null, userQuery = '', onClose, inl
                     <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-[#4827AF] to-[#FF693B]">
                         <div className="flex items-center gap-2 text-white">
                             <GitBranch size={18} />
-                            <h3 className="font-medium">解决流程图</h3>
+                            <h3 className="font-medium">Resolution Flowchart</h3>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={handleZoomOut} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors" title="缩小">
+                            <button onClick={handleZoomOut} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors" title="Zoom out">
                                 <ZoomOut size={14} />
                             </button>
                             <span className="text-white text-sm min-w-[50px] text-center">{Math.round(scale * 100)}%</span>
-                            <button onClick={handleZoomIn} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors" title="放大">
+                            <button onClick={handleZoomIn} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors" title="Zoom in">
                                 <ZoomIn size={14} />
                             </button>
-                            <button onClick={handleReset} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors text-xs" title="重置视图">
-                                重置
+                            <button onClick={handleReset} className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors text-xs" title="Reset view">
+                                Reset
                             </button>
                         </div>
                     </div>
@@ -897,14 +936,14 @@ const MermaidDiagram = ({ records, flowPlan = null, userQuery = '', onClose, inl
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-[#4827AF] to-[#FF693B] rounded-t-xl">
                     <div className="flex items-center gap-2 text-white">
                         <GitBranch size={20} />
-                        <h3 className="font-medium">解决方案流程图</h3>
+                        <h3 className="font-medium">Solution Flowchart</h3>
                     </div>
                     <div className="flex items-center gap-2">
                         {/* 缩放控制 */}
                         <button
                             onClick={handleZoomOut}
                             className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
-                            title="缩小"
+                            title="Zoom out"
                         >
                             <ZoomOut size={16} />
                         </button>
@@ -914,7 +953,7 @@ const MermaidDiagram = ({ records, flowPlan = null, userQuery = '', onClose, inl
                         <button
                             onClick={handleZoomIn}
                             className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors"
-                            title="放大"
+                            title="Zoom in"
                         >
                             <ZoomIn size={16} />
                         </button>
@@ -931,16 +970,16 @@ const MermaidDiagram = ({ records, flowPlan = null, userQuery = '', onClose, inl
                                 }
                             }}
                             className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors text-xs"
-                            title={isZoomed ? '还原视图' : '放大视图'}
+                            title={isZoomed ? 'Restore view' : 'Zoom view'}
                         >
-                            {isZoomed ? '还原' : '放大'}
+                            {isZoomed ? 'Restore' : 'Zoom'}
                         </button>
                         <button
                             onClick={handleReset}
                             className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors text-xs"
-                            title="重置视图（恢复初始位置和缩放）"
+                            title="Reset view (restore initial pan and zoom)"
                         >
-                            重置
+                            Reset
                         </button>
                         <button
                             onClick={async () => {
@@ -967,7 +1006,7 @@ const MermaidDiagram = ({ records, flowPlan = null, userQuery = '', onClose, inl
                                 }
                             }}
                             className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition-colors ml-2"
-                            title={isFullscreen ? '退出全屏' : '全屏'}
+                            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                         >
                             <Maximize2 size={16} />
                         </button>
@@ -977,7 +1016,7 @@ const MermaidDiagram = ({ records, flowPlan = null, userQuery = '', onClose, inl
                             onTouchStart={startResize}
                             onClick={(e) => e.stopPropagation()}
                             className="absolute right-2 bottom-2 w-4 h-4 cursor-se-resize z-50"
-                            title="拖拽调整大小"
+                            title="Drag to resize"
                             style={{ opacity: 0.9 }}
                         >
                             <svg width="100%" height="100%" viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg" fill="none" stroke="#9CA3AF" strokeWidth="1">
@@ -1024,28 +1063,28 @@ const MermaidDiagram = ({ records, flowPlan = null, userQuery = '', onClose, inl
                 <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 rounded-b-xl">
                     <div className="flex items-center justify-between text-xs text-gray-500">
                         <div className="flex items-center gap-4">
-                            <span>基于 {records?.length || 0} 条检索记录生成</span>
+                            <span>Generated from {records?.length || 0} retrieved records</span>
                             <div className="flex items-center gap-3 text-gray-400">
                                 <span className="flex items-center gap-1">
                                     <span className="w-3 h-3 rounded bg-red-200 border border-red-400"></span>
-                                    问题
+                                    Problem
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <span className="w-3 h-3 rounded bg-amber-100 border border-amber-400"></span>
-                                    原因
+                                    Cause
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <span className="w-3 h-3 rounded bg-blue-100 border border-blue-400"></span>
-                                    措施
+                                    Action
                                 </span>
                                 <span className="flex items-center gap-1">
                                     <span className="w-3 h-3 rounded bg-green-100 border border-green-400"></span>
-                                    完成
+                                    Complete
                                 </span>
                             </div>
                         </div>
                         <details className="cursor-pointer">
-                            <summary className="hover:text-gray-700">查看 Mermaid 代码</summary>
+                            <summary className="hover:text-gray-700">View Mermaid code</summary>
                             <pre className="mt-2 p-2 bg-gray-200 dark:bg-gray-700 rounded text-xs max-h-32 overflow-auto">
                                 {mermaidCode}
                             </pre>

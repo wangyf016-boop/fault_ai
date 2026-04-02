@@ -405,7 +405,7 @@ const ChatPage = () => {
             isStreaming: true,
             diagnosisData: null,
             routeUsed: null,
-            progressStatus: '正在分析问题...'
+            progressStatus: 'Analyzing issue...'
         }]);
 
         try {
@@ -426,14 +426,14 @@ const ChatPage = () => {
                     newConversationId = meta.conversation_id;
                     setMessages((prev) => prev.map((msg) =>
                         msg.id === assistantMessageId
-                            ? { ...msg, progressStatus: '正在分析问题...' }
+                                ? { ...msg, progressStatus: 'Analyzing issue...' }
                             : msg
                     ));
                 },
                 onRoute: (route) => {
                     const status = route === 'diagnosis'
-                        ? '正在检索图谱...'
-                        : (route === 'search' ? '正在检索图谱...' : '正在处理中...');
+                                ? 'Retrieving graph...'
+                                : (route === 'search' ? 'Retrieving graph...' : 'Processing...');
                     setMessages((prev) => prev.map((msg) =>
                         msg.id === assistantMessageId
                             ? { ...msg, routeUsed: route, progressStatus: status }
@@ -451,7 +451,7 @@ const ChatPage = () => {
                         console.log('[DEBUG] Setting qdrantRecords on message', assistantMessageId);
                         return prev.map((msg) => 
                             msg.id === assistantMessageId
-                                ? { ...msg, qdrantRecords: records, showGraph: nextShowGraph, neo4jQueryMode: nextNeo4jQueryMode, progressStatus: '正在检索表格...' }
+                                    ? { ...msg, qdrantRecords: records, showGraph: nextShowGraph, neo4jQueryMode: nextNeo4jQueryMode, progressStatus: 'Retrieving table...' }
                                 : msg
                         );
                     });
@@ -459,7 +459,7 @@ const ChatPage = () => {
                 onFlowPlan: (plan) => {
                     console.log('[DEBUG] onFlowPlan received:', plan?.steps?.length, 'steps');
                     setMessages((prev) => prev.map((msg) =>
-                        msg.id === assistantMessageId ? { ...msg, flowPlan: plan, progressStatus: '正在生成流程图...' } : msg
+                        msg.id === assistantMessageId ? { ...msg, flowPlan: plan, progressStatus: 'Generating flowchart...' } : msg
                     ));
                 },
                 onDiagnosisKg: (data) => {
@@ -467,7 +467,7 @@ const ChatPage = () => {
                     currentDiagnosisKg = data;
                     setMessages((prev) => prev.map((msg) =>
                         msg.id === assistantMessageId
-                            ? { ...msg, diagnosisData: { kg: data, records: currentDiagnosisRecords, flowchart: currentDiagnosisFlowchart }, progressStatus: '正在检索表格...' }
+                                    ? { ...msg, diagnosisData: { kg: data, records: currentDiagnosisRecords, flowchart: currentDiagnosisFlowchart }, progressStatus: 'Retrieving table...' }
                             : msg
                     ));
                 },
@@ -476,7 +476,7 @@ const ChatPage = () => {
                     currentDiagnosisRecords = data;
                     setMessages((prev) => prev.map((msg) =>
                         msg.id === assistantMessageId
-                            ? { ...msg, diagnosisData: { kg: currentDiagnosisKg, records: data, flowchart: currentDiagnosisFlowchart }, progressStatus: '正在生成流程图...' }
+                                    ? { ...msg, diagnosisData: { kg: currentDiagnosisKg, records: data, flowchart: currentDiagnosisFlowchart }, progressStatus: 'Generating flowchart...' }
                             : msg
                     ));
                 },
@@ -485,7 +485,7 @@ const ChatPage = () => {
                     currentDiagnosisFlowchart = data;
                     setMessages((prev) => prev.map((msg) =>
                         msg.id === assistantMessageId
-                            ? { ...msg, diagnosisData: { kg: currentDiagnosisKg, records: currentDiagnosisRecords, flowchart: data }, progressStatus: '正在生成流程图...' }
+                                    ? { ...msg, diagnosisData: { kg: currentDiagnosisKg, records: currentDiagnosisRecords, flowchart: data }, progressStatus: 'Generating flowchart...' }
                             : msg
                     ));
                 },
@@ -591,7 +591,7 @@ const ChatPage = () => {
     };
 
     return (
-        <div className="flex h-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative">
+        <div className="flex w-full min-w-0 h-full bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative">
             {error && (
                 <div className="absolute top-4 right-4 z-50 bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-in slide-in-from-top-2">
                     <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"/>
@@ -609,7 +609,7 @@ const ChatPage = () => {
                 isLoading={sessionsLoading}
             />
 
-            <div className="flex-1 flex flex-col h-full relative bg-slate-50/50">
+            <div className="flex-1 min-w-0 flex flex-col h-full relative bg-slate-50/50">
                 <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
                     {isHistoryLoading && (
                         <div className="flex flex-col items-center justify-center h-full space-y-3">

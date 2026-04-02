@@ -10,6 +10,7 @@ import { sendMessage } from '../../services/chatApi';
 const FOLLOWUP_HISTORY_STORAGE_PREFIX = 'chat_followup_history_v1';
 const FOLLOWUP_HISTORY_STORAGE_V2_PREFIX = 'chat_followup_history_v2';
 const FOLLOWUP_MEMORY_CACHE = new Map();
+const ASSISTANT_WIDTH_STORAGE_KEY = 'chat_assistant_bubble_width_v1';
 
 const isFollowupDebugEnabled = () => {
     if (typeof window === 'undefined') return false;
@@ -119,7 +120,7 @@ const buildFollowupRecords = (message) => {
 
 const getDefaultRecordSort = () => ({ key: 'similarity', direction: 'desc' });
 
-const RecordsTable = ({ records, title = "检索记录" }) => {
+const RecordsTable = ({ records, title = "Retrieved Records" }) => {
     const [expanded, setExpanded] = useState(true);
     const [sortState, setSortState] = useState(getDefaultRecordSort); // key: 'date' | 'similarity'
 
@@ -163,7 +164,7 @@ const RecordsTable = ({ records, title = "检索记录" }) => {
             >
                 <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                     <Table size={16} className="text-brand-orange-500" />
-                    {title} <span className="text-brand-purple-500">({displayRecords.length}/{records.length} 条)</span>
+                    {title} <span className="text-brand-purple-500">({displayRecords.length}/{records.length} rows)</span>
                 </span>
                 {expanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
             </button>
@@ -172,17 +173,17 @@ const RecordsTable = ({ records, title = "检索记录" }) => {
                     <table className="w-full text-xs">
                         <thead className="bg-slate-50 sticky top-0">
                             <tr>
-                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">产线</th>
-                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">工位</th>
-                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">问题</th>
-                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">原因</th>
-                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">措施</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">Line</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">Station</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">Problem</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">Cause</th>
+                                <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">Action</th>
                                 <th
                                     className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap cursor-pointer select-none hover:text-brand-orange-500 transition-colors"
                                     onClick={() => toggleSort('date')}
-                                    title={sortState.key !== 'date' || sortState.direction === null ? '点击按日期降序' : sortState.direction === 'desc' ? '点击按日期升序' : '点击恢复默认排序'}
+                                    title={sortState.key !== 'date' || sortState.direction === null ? 'Sort by date (desc)' : sortState.direction === 'desc' ? 'Sort by date (asc)' : 'Restore default sorting'}
                                 >
-                                    日期
+                                    Date
                                     {sortState.key === 'date' && sortState.direction === 'asc' && <ArrowUp size={11} className="inline ml-1 text-brand-orange-500" />}
                                     {sortState.key === 'date' && sortState.direction === 'desc' && <ArrowDown size={11} className="inline ml-1 text-brand-orange-500" />}
                                     {(sortState.key !== 'date' || !sortState.direction) && <ArrowDown size={11} className="inline ml-1 text-slate-300" />}
@@ -190,9 +191,9 @@ const RecordsTable = ({ records, title = "检索记录" }) => {
                                 <th
                                     className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap cursor-pointer select-none hover:text-brand-orange-500 transition-colors"
                                     onClick={() => toggleSort('similarity')}
-                                    title={sortState.key !== 'similarity' || sortState.direction === null ? '点击按相似度降序' : sortState.direction === 'desc' ? '点击按相似度升序' : '点击恢复默认排序'}
+                                    title={sortState.key !== 'similarity' || sortState.direction === null ? 'Sort by similarity (desc)' : sortState.direction === 'desc' ? 'Sort by similarity (asc)' : 'Restore default sorting'}
                                 >
-                                    相似度
+                                    Similarity
                                     {sortState.key === 'similarity' && sortState.direction === 'asc' && <ArrowUp size={11} className="inline ml-1 text-brand-orange-500" />}
                                     {sortState.key === 'similarity' && sortState.direction === 'desc' && <ArrowDown size={11} className="inline ml-1 text-brand-orange-500" />}
                                     {(sortState.key !== 'similarity' || !sortState.direction) && <ArrowDown size={11} className="inline ml-1 text-slate-300" />}
@@ -226,7 +227,7 @@ const RecordsTable = ({ records, title = "检索记录" }) => {
                             ))}
                             {records.length > MAX_DISPLAY && (
                                 <tr className="border-t border-slate-100 bg-slate-50">
-                                    <td colSpan={7} className="px-3 py-2.5 text-xs text-slate-500">只显示最相关的 {MAX_DISPLAY} 条记录，更多请到详细页面查看。</td>
+                                    <td colSpan={7} className="px-3 py-2.5 text-xs text-slate-500">Only the top {MAX_DISPLAY} most relevant records are shown. See the detailed page for more.</td>
                                 </tr>
                             )}
                         </tbody>
@@ -243,7 +244,17 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
     const [followupInput, setFollowupInput] = useState('');
     const [followupLoading, setFollowupLoading] = useState(false);
     const [followupHistory, setFollowupHistory] = useState([]);
-    const [assistantWidth, setAssistantWidth] = useState(null);
+    const [assistantWidth, setAssistantWidth] = useState(() => {
+        if (typeof window === 'undefined') return null;
+        try {
+            const raw = window.localStorage.getItem(ASSISTANT_WIDTH_STORAGE_KEY);
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed) || parsed < MIN_ASSISTANT_WIDTH) return null;
+            return parsed;
+        } catch {
+            return null;
+        }
+    });
     const [statusDotCount, setStatusDotCount] = useState(0);
     const [showNonDiagTable, setShowNonDiagTable] = useState(!message?.isStreaming);
     const [showNonDiagMermaid, setShowNonDiagMermaid] = useState(!message?.isStreaming);
@@ -383,10 +394,39 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
         return protectedHistory;
     };
     // 过滤掉表格占位符
-    const displayContent = message.content === '[表格数据]' ? '' : message.content;
+    const displayContent = message.content === '[table_data]' ? '' : message.content;
     const shouldUseLeadContent = hasDiagnosisData || hasQdrantRecords;
+    const normalizeDiagnosisLeadText = (text) => {
+        const source = String(text || '').trim();
+        if (!source) return '';
+
+        const exactMap = {
+            '已生成图谱、表格和流程图，请先查看结果；如需解释请在下方继续追问。':
+                'The graph, table, and flowchart have been generated. Please review the results first; if you need an explanation, continue with a follow-up question below.',
+            '已生成图谱、表格和流程图，请先查看结果。如需解释请在下方继续追问。':
+                'The graph, table, and flowchart have been generated. Please review the results first; if you need an explanation, continue with a follow-up question below.',
+            '已生成图谱、表格和流程图，请先查看结果；如需解释请继续追问。':
+                'The graph, table, and flowchart have been generated. Please review the results first; if you need an explanation, continue with a follow-up question below.',
+            '已生成图谱、表格和流程图，请先查看结果。':
+                'The graph, table, and flowchart have been generated. Please review the results first.',
+        };
+
+        if (exactMap[source]) return exactMap[source];
+
+        let normalized = source;
+        normalized = normalized.replace(
+            /已生成图谱、表格和流程图，请先查看结果[；;。\.]?如需解释请在下方继续追问[。\.]?/g,
+            'The graph, table, and flowchart have been generated. Please review the results first; if you need an explanation, continue with a follow-up question below.'
+        );
+        normalized = normalized.replace(
+            /已生成图谱、表格和流程图，请先查看结果[；;。\.]?如需解释请继续追问[。\.]?/g,
+            'The graph, table, and flowchart have been generated. Please review the results first; if you need an explanation, continue with a follow-up question below.'
+        );
+
+        return normalized;
+    };
     const diagnosisLeadContent = shouldUseLeadContent
-        ? (displayContent ? String(displayContent).split('\n').find((line) => line.trim()) || '' : '')
+        ? normalizeDiagnosisLeadText(displayContent ? String(displayContent).split('\n').find((line) => line.trim()) || '' : '')
         : '';
     const streamingProgressText = (() => {
         if (!isStreaming || isUser) return '';
@@ -396,19 +436,19 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
             const hasKg = !!message?.diagnosisData?.kg;
             const hasTable = !!message?.diagnosisData?.records;
             const hasFlow = !!message?.diagnosisData?.flowchart;
-            if (!hasKg) return '正在生成图谱...';
-            if (!hasTable) return '正在检索表格...';
-            if (!hasFlow) return '正在生成流程图...';
-            return '正在整理结果...';
+            if (!hasKg) return 'Generating graph...';
+            if (!hasTable) return 'Retrieving table...';
+            if (!hasFlow) return 'Generating flowchart...';
+            return 'Finalizing results...';
         }
 
         if (hasQdrantRecords) {
-            if (!showNonDiagTable) return '正在检索表格...';
-            if (!showNonDiagMermaid) return '正在生成流程图...';
-            return '正在整理结果...';
+            if (!showNonDiagTable) return 'Retrieving table...';
+            if (!showNonDiagMermaid) return 'Generating flowchart...';
+            return 'Finalizing results...';
         }
 
-        return '正在分析问题...';
+        return 'Analyzing issue...';
     })();
     const animatedStreamingProgressText = (() => {
         if (!streamingProgressText) return '';
@@ -476,6 +516,13 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
 
         const handleMouseUp = () => {
             resizeStateRef.current = null;
+            if (typeof window === 'undefined') return;
+            if (!Number.isFinite(assistantWidth)) return;
+            try {
+                window.localStorage.setItem(ASSISTANT_WIDTH_STORAGE_KEY, String(Math.round(assistantWidth)));
+            } catch {
+                // ignore storage write failure
+            }
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -485,7 +532,18 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, []);
+    }, [assistantWidth]);
+
+    useEffect(() => {
+        if (isUser) return;
+        if (!Number.isFinite(assistantWidth)) return;
+        const rowWidth = rowRef.current?.offsetWidth;
+        if (!Number.isFinite(rowWidth) || rowWidth <= 0) return;
+        const maxWidth = Math.max(MIN_ASSISTANT_WIDTH, rowWidth - 56);
+        if (assistantWidth > maxWidth) {
+            setAssistantWidth(maxWidth);
+        }
+    }, [assistantWidth, isUser]);
 
     useEffect(() => {
         followupHydratedRef.current = false;
@@ -680,7 +738,7 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                     });
                 },
                 onError: (err) => {
-                    const msg = err || '追问失败，请重试。';
+                    const msg = err || 'Follow-up failed. Please try again.';
                     const nextHistory = persistFollowupHistoryDirect(
                         (followupHistoryRef.current || []).map((item) => (
                             item.id === qaId ? { ...item, a: msg, isStreaming: false } : item
@@ -696,7 +754,7 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                 }
             });
         } catch (err) {
-            const msg = err?.message || '追问失败，请重试。';
+            const msg = err?.message || 'Follow-up failed. Please try again.';
             const nextHistory = persistFollowupHistoryDirect(
                 (followupHistoryRef.current || []).map((item) => (
                     item.id === qaId ? { ...item, a: msg, isStreaming: false } : item
@@ -737,7 +795,7 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                     <div
                         onMouseDown={handleResizeStart}
                         className="absolute top-0 -right-2 h-full w-3 cursor-col-resize select-none"
-                        title="拖动右侧边缘调整宽度"
+                        title="Drag right edge to resize width"
                     >
                         <div className="mx-auto h-full w-px bg-slate-200 hover:bg-brand-orange-400 transition-colors" />
                     </div>
@@ -774,9 +832,9 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                                 <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
                                     <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                                         <Table size={15} className="text-slate-400" />
-                                        Neo4j图谱
+                                        Neo4j Graph
                                     </span>
-                                    <span className="text-xs text-slate-400">{withAnimatedDots('正在检索图谱')}</span>
+                                    <span className="text-xs text-slate-400">{withAnimatedDots('Retrieving graph')}</span>
                                 </div>
                                 <div className="px-4 py-4">
                                     <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
@@ -789,9 +847,9 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                                 <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
                                     <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                                         <Table size={15} className="text-slate-400" />
-                                        Qdrant表格
+                                        Qdrant Table
                                     </span>
-                                    <span className="text-xs text-slate-400">{withAnimatedDots('正在检索表格')}</span>
+                                    <span className="text-xs text-slate-400">{withAnimatedDots('Retrieving table')}</span>
                                 </div>
                                 <div className="px-4 py-4">
                                     <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
@@ -804,9 +862,9 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                                 <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
                                     <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                                         <Table size={15} className="text-slate-400" />
-                                        Mermaid流程图
+                                        Mermaid Flowchart
                                     </span>
-                                    <span className="text-xs text-slate-400">{withAnimatedDots('等待表格完成后生成')}</span>
+                                    <span className="text-xs text-slate-400">{withAnimatedDots('Waiting for table completion')}</span>
                                 </div>
                                 <div className="px-4 py-4">
                                     <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
@@ -845,15 +903,15 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                             </div>
 
                             {showNonDiagTable ? (
-                                <RecordsTable records={message.qdrantRecords} title="检索记录" />
+                                <RecordsTable records={message.qdrantRecords} title="Retrieved Records" />
                             ) : (
                                 <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
                                     <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
                                         <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                                             <Table size={15} className="text-slate-400" />
-                                            Qdrant表格
+                                            Qdrant Table
                                         </span>
-                                        <span className="text-xs text-slate-400">{withAnimatedDots('正在检索表格')}</span>
+                                        <span className="text-xs text-slate-400">{withAnimatedDots('Retrieving table')}</span>
                                     </div>
                                     <div className="px-4 py-4">
                                         <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
@@ -876,9 +934,9 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                                     <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
                                         <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                                             <Table size={15} className="text-slate-400" />
-                                            Mermaid流程图
+                                            Mermaid Flowchart
                                         </span>
-                                        <span className="text-xs text-slate-400">{withAnimatedDots('正在生成流程图')}</span>
+                                        <span className="text-xs text-slate-400">{withAnimatedDots('Generating flowchart')}</span>
                                     </div>
                                     <div className="px-4 py-4">
                                         <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
@@ -891,7 +949,7 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                             {showGraph && (
                                 <KnowledgeGraph
                                     records={message.qdrantRecords}
-                                    title="补充关系图"
+                                    title="Supplementary Relationship Graph"
                                     defaultExpanded={false}
                                 />
                             )}
@@ -900,15 +958,18 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                     {/* 纯文字追问区（仅在三段结果全部生成后显示） */}
                     {shouldShowFollowupPanel && (
                         <div className="mt-4 border border-slate-200 rounded-xl bg-slate-50/60 p-3">
-                            <div className="text-sm font-semibold text-slate-700 mb-2">追问</div>
+                            <div className="text-sm font-semibold text-slate-700 mb-2">Follow-up</div>
+                            <div className="text-xs text-slate-500 mb-2">
+                                The graph, table, and flowchart have been generated. Please review the results first; if you need an explanation, continue with a follow-up question below.
+                            </div>
 
                             {followupHistory.length > 0 && (
                                 <div className="space-y-2 mb-3 max-h-64 overflow-y-auto pr-1">
                                     {followupHistory.map((item) => (
                                         <div key={item.id} className="space-y-1">
-                                            <div className="text-xs text-slate-500">追问：{item.q}</div>
+                                            <div className="text-xs text-slate-500">Follow-up: {item.q}</div>
                                             <div className="text-sm text-slate-700 bg-white border border-slate-200 rounded-lg px-3 py-2 whitespace-pre-wrap">
-                                                {item.a || '思考中...'}
+                                                {item.a || 'Thinking...'}
                                                 {item.isStreaming && <span className="inline-block w-2 h-4 bg-current animate-pulse ml-1" />}
                                             </div>
                                         </div>
@@ -926,7 +987,7 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                                             handleFollowupSend();
                                         }
                                     }}
-                                    placeholder="继续追问当前结果"
+                                    placeholder="Ask a follow-up about the current result"
                                     className="flex-1 min-h-[44px] max-h-[120px] resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-orange-100 focus:border-brand-orange-400"
                                 />
                                 <button
@@ -937,7 +998,7 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                                         : 'bg-gradient-to-r from-brand-orange-500 to-brand-orange-400 text-white hover:opacity-95'
                                         }`}
                                 >
-                                    {followupLoading ? '回答中...' : '追问'}
+                                    {followupLoading ? 'Answering...' : 'Ask'}
                                 </button>
                             </div>
                         </div>

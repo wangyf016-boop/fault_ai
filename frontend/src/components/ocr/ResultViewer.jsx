@@ -26,7 +26,7 @@ const ResultViewer = ({ task, result, onClose, onDownload }) => {
                         </div>
                         <div>
                             <h3 className="font-semibold">{task.filename}</h3>
-                            <p className="text-xs text-muted-foreground">OCR 识别结果</p>
+                            <p className="text-xs text-muted-foreground">OCR Recognition Result</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -35,14 +35,14 @@ const ResultViewer = ({ task, result, onClose, onDownload }) => {
                             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
                         >
                             {copied ? <Check size={16} className="text-success" /> : <Copy size={16} />}
-                            {copied ? '已复制' : '复制'}
+                            {copied ? 'Copied' : 'Copy'}
                         </button>
                         <button
                             onClick={() => onDownload?.(task)}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
                         >
                             <Download size={16} />
-                            下载
+                            Download
                         </button>
                         <button
                             onClick={onClose}
@@ -79,7 +79,7 @@ const ResultViewer = ({ task, result, onClose, onDownload }) => {
                         >
                             <div className="flex items-center gap-2">
                                 <Image size={16} />
-                                图片 ({result.images.length})
+                                Images ({result.images.length})
                             </div>
                         </button>
                     )}
@@ -90,7 +90,7 @@ const ResultViewer = ({ task, result, onClose, onDownload }) => {
                     {activeTab === 'markdown' && (
                         <div className="bg-muted/30 rounded-lg p-4">
                             <pre className="whitespace-pre-wrap text-sm font-mono leading-relaxed">
-                                {result.markdown || '无内容'}
+                                {result.markdown || 'No content'}
                             </pre>
                         </div>
                     )}
@@ -100,12 +100,12 @@ const ResultViewer = ({ task, result, onClose, onDownload }) => {
                                 <div key={index} className="border border-border rounded-lg overflow-hidden">
                                     <img
                                         src={img.url}
-                                        alt={img.name || `图片 ${index + 1}`}
+                                        alt={img.name || `Image ${index + 1}`}
                                         className="w-full h-40 object-cover"
                                     />
                                     {img.ocrText && (
                                         <div className="p-2 bg-muted/50 text-xs">
-                                            <p className="font-medium mb-1">识别文字：</p>
+                                            <p className="font-medium mb-1">Recognized Text:</p>
                                             <p className="text-muted-foreground line-clamp-3">
                                                 {img.ocrText}
                                             </p>

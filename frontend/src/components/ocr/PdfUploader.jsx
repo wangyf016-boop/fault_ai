@@ -24,7 +24,7 @@ const PdfUploader = ({ onUpload, disabled }) => {
             if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
                 validFiles.push(file);
             } else {
-                errors.push(`${file.name} 不是 PDF 文件`);
+                errors.push(`${file.name} is not a PDF file`);
             }
         });
 

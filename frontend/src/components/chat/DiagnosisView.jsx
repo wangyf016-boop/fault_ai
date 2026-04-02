@@ -24,7 +24,7 @@ const StreamPendingPanel = ({ title }) => (
                 <Clock size={15} className="text-slate-400" />
                 {title}
             </span>
-            <span className="text-xs text-slate-400">生成中...</span>
+            <span className="text-xs text-slate-400">Generating...</span>
         </div>
         <div className="px-4 py-4">
             <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
@@ -54,7 +54,7 @@ const KnowledgeGraphPanel = ({ graph, summary, records, sourceQuery }) => {
             trigger: 'item',
             formatter: (params) => {
                 if (params.dataType === 'node') {
-                    const cat = categories[params.data.category]?.name || '节点';
+                    const cat = categories[params.data.category]?.name || 'Node';
                     return `<div style="max-width:300px;word-wrap:break-word;">
                         <strong>${cat}</strong><br/>${params.data.fullName || params.data.name}
                     </div>`;
@@ -103,9 +103,9 @@ const KnowledgeGraphPanel = ({ graph, summary, records, sourceQuery }) => {
                 onClick={() => !fullscreen && setExpanded(!expanded)}>
                 <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                     <Network size={16} className="text-red-500" />
-                    图谱
+                    Graph
                     <span className="text-slate-400 font-normal">
-                        ({((graph && graph.nodes) || []).length} 节点, {((graph && graph.links) || []).length} 关系)
+                        ({((graph && graph.nodes) || []).length} nodes, {((graph && graph.links) || []).length} edges)
                     </span>
                 </span>
                 <div className="flex items-center gap-1">
@@ -140,7 +140,7 @@ const KnowledgeGraphPanel = ({ graph, summary, records, sourceQuery }) => {
                     </>
                 )}
                 {(expanded || fullscreen) && !hasGraph && (
-                    <EmptyPanelBody text="当前问题未检索到可展示的图谱数据。" />
+                    <EmptyPanelBody text="No graph data available for the current query." />
                 )}
             </div>
             {/* 摘要 */}
@@ -202,8 +202,8 @@ const RecordsPanel = ({ records, summary }) => {
                 className="w-full flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition-colors">
                 <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                     <Search size={16} className="text-blue-500" />
-                    表格
-                    <span className="text-blue-500 font-medium">({hasRecords ? sortedRecords.length : 0} 条)</span>
+                    Table
+                    <span className="text-blue-500 font-medium">({hasRecords ? sortedRecords.length : 0} rows)</span>
                 </span>
                 {expanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
             </button>
@@ -222,15 +222,15 @@ const RecordsPanel = ({ records, summary }) => {
                                 <thead className="bg-slate-50 sticky top-0 z-10">
                                     <tr>
                                         <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">#</th>
-                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">工位</th>
-                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">问题</th>
-                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">原因</th>
-                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">措施</th>
+                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">Station</th>
+                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">Problem</th>
+                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">Cause</th>
+                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap min-w-[150px]">Action</th>
                                         <th
                                             className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap cursor-pointer"
                                             onClick={() => requestSort('date')}
                                         >
-                                            日期
+                                            Date
                                             {sortConfig.key === 'date' &&
                                                 (sortConfig.direction === 'asc' ? (
                                                     <ArrowDown size={12} className="inline ml-1" />
@@ -238,7 +238,7 @@ const RecordsPanel = ({ records, summary }) => {
                                                     <ArrowUp size={12} className="inline ml-1" />
                                                 ))}
                                         </th>
-                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">相似度</th>
+                                        <th className="px-3 py-2.5 text-left font-semibold text-slate-600 whitespace-nowrap">Similarity</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -269,7 +269,7 @@ const RecordsPanel = ({ records, summary }) => {
                             </table>
                         </div>
                     ) : (
-                        <EmptyPanelBody text="当前问题未检索到可展示的记录数据。" />
+                        <EmptyPanelBody text="No record data available for the current query." />
                     )}
                 </>
             )}
@@ -291,8 +291,8 @@ const FlowchartPanel = ({ records, summary, plan, answerText = '', userQuery = '
                 className="w-full flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-purple-50 to-violet-50 hover:from-purple-100 hover:to-violet-100 transition-colors">
                 <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                     <GitBranch size={16} className="text-purple-500" />
-                    流程图
-                    <span className="text-purple-500 font-medium">({hasFlowRecords ? records.length : 0} 步)</span>
+                    Flowchart
+                    <span className="text-purple-500 font-medium">({hasFlowRecords ? records.length : 0} steps)</span>
                 </span>
                 {expanded ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
             </button>
@@ -312,7 +312,7 @@ const FlowchartPanel = ({ records, summary, plan, answerText = '', userQuery = '
                         ))}
                     </div>
                     ) : (
-                        <EmptyPanelBody text="当前问题未生成可展示的流程步骤。" />
+                        <EmptyPanelBody text="No flow steps generated for the current query." />
                     )}
                     {/* 内嵌流程图插件 */}
                     <div className="px-4 pb-4 border-t border-slate-100 bg-slate-50">
@@ -340,10 +340,10 @@ const PriorityCard = ({ record, index }) => {
 
     // 四维度条形图数据
     const dimensions = [
-        { key: 'frequency', label: '频率', value: r.priority_frequency ?? 0, color: '#ef4444', icon: BarChart3 },
-        { key: 'similarity', label: '相似度', value: r.priority_similarity ?? 0, color: '#f97316', icon: Search },
-        { key: 'recency', label: '近期度', value: r.priority_recency ?? 0, color: '#3b82f6', icon: Clock },
-        { key: 'efficiency', label: '效率', value: r.priority_efficiency ?? 0, color: '#10b981', icon: Zap },
+        { key: 'frequency', label: 'Frequency', value: r.priority_frequency ?? 0, color: '#ef4444', icon: BarChart3 },
+        { key: 'similarity', label: 'Similarity', value: r.priority_similarity ?? 0, color: '#f97316', icon: Search },
+        { key: 'recency', label: 'Recency', value: r.priority_recency ?? 0, color: '#3b82f6', icon: Clock },
+        { key: 'efficiency', label: 'Efficiency', value: r.priority_efficiency ?? 0, color: '#10b981', icon: Zap },
     ];
 
     const rankColors = ['bg-red-500', 'bg-orange-500', 'bg-amber-500', 'bg-blue-500', 'bg-slate-400'];
@@ -360,14 +360,14 @@ const PriorityCard = ({ record, index }) => {
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-semibold text-slate-700 truncate">
-                            {r.cause || '原因未知'}
+                            {r.cause || 'Unknown cause'}
                         </span>
                         <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full whitespace-nowrap">
-                            综合 {(total * 100).toFixed(0)}分
+                            Total {(total * 100).toFixed(0)}
                         </span>
                         {r.occurrence_count > 1 && (
                             <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                出现 {r.occurrence_count} 次
+                                Occurred {r.occurrence_count} times
                             </span>
                         )}
                     </div>
@@ -376,7 +376,7 @@ const PriorityCard = ({ record, index }) => {
                     {/* 措施 */}
                     {r.action && (
                         <p className="text-xs text-emerald-600 mb-2 line-clamp-2">
-                            <span className="font-medium">对策：</span>{r.action}
+                            <span className="font-medium">Action:</span>{r.action}
                         </p>
                     )}
                     {/* 四维度条形图 */}
@@ -395,9 +395,9 @@ const PriorityCard = ({ record, index }) => {
                     </div>
                     {/* 元信息 */}
                     <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-400">
-                        <span>工位: {r.station || '-'}</span>
-                        <span>日期: {r.date || '-'}</span>
-                        <span>相似度: {r.score_percent ?? '-'}%</span>
+                        <span>Station: {r.station || '-'}</span>
+                        <span>Date: {r.date || '-'}</span>
+                        <span>Similarity: {r.score_percent ?? '-'}%</span>
                     </div>
                 </div>
             </div>
@@ -421,7 +421,7 @@ const DiagnosisView = ({ diagnosisData, answerText = '', userQuery = '', isStrea
     return (
         <div className="space-y-4 mt-3 w-full max-w-8xl mx-auto min-w-0">
             {isStreaming && !hasKgModule && !hasRecordsModule && !hasFlowchartModule && (
-                <StreamPendingPanel title="图谱" />
+                <StreamPendingPanel title="Graph" />
             )}
 
             {/* Part 1: 知识图谱 */}
@@ -440,7 +440,7 @@ const DiagnosisView = ({ diagnosisData, answerText = '', userQuery = '', isStrea
                     records={tableRecords}
                     summary={records?.summary}
                 />
-            ) : (isStreaming && hasKgModule ? <StreamPendingPanel title="表格" /> : null)}
+            ) : (isStreaming && hasKgModule ? <StreamPendingPanel title="Table" /> : null)}
 
             {/* Part 3: 排查流程 */}
             {hasFlowchartModule ? (
@@ -451,7 +451,7 @@ const DiagnosisView = ({ diagnosisData, answerText = '', userQuery = '', isStrea
                     answerText={answerText}
                     userQuery={userQuery}
                 />
-            ) : (isStreaming && (hasKgModule || hasRecordsModule) ? <StreamPendingPanel title="流程图" /> : null)}
+            ) : (isStreaming && (hasKgModule || hasRecordsModule) ? <StreamPendingPanel title="Flowchart" /> : null)}
         </div>
     );
 };

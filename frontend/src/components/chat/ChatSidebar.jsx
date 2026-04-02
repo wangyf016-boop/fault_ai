@@ -44,7 +44,7 @@ const ChatSidebar = ({ sessions, activeSessionId, onSelectSession, onNewSession,
     const groupEntries = Object.entries(groupedSessions);
 
     return (
-        <div className={`${isCollapsed ? 'w-20 min-w-[80px] border-r border-slate-200' : 'w-72 border-r border-slate-200'} h-full shrink-0 flex flex-col bg-white transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] relative overflow-visible`}>
+        <div className={`${isCollapsed ? 'w-20 min-w-[80px] border-r border-slate-200' : 'w-72 border-r border-slate-200'} h-full shrink-0 flex flex-col bg-white transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] relative overflow-visible z-10`}>
             {/* Toggle Button */}
             <button 
                 onClick={() => setIsCollapsed(!isCollapsed)}

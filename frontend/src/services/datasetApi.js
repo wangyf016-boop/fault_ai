@@ -25,7 +25,7 @@ export async function embedDataset(file, options = {}) {
     
     if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || '上传失败');
+        throw new Error(error.detail || 'Upload failed');
     }
     
     return response.json();
@@ -39,7 +39,7 @@ export async function getEmbeddingStatus(taskId) {
     
     if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || '获取状态失败');
+        throw new Error(error.detail || 'Failed to get status');
     }
     
     return response.json();
@@ -81,7 +81,7 @@ export async function listCollections() {
     const response = await fetch(`${API_BASE_URL}/api/datasets/collections`);
     
     if (!response.ok) {
-        throw new Error('获取集合列表失败');
+        throw new Error('Failed to fetch collection list');
     }
     
     return response.json();
@@ -94,7 +94,7 @@ export async function getCollectionInfo(name) {
     const response = await fetch(`${API_BASE_URL}/api/datasets/collections/${name}/info`);
     
     if (!response.ok) {
-        throw new Error('获取集合信息失败');
+        throw new Error('Failed to fetch collection info');
     }
     
     return response.json();
@@ -109,7 +109,7 @@ export async function getCollectionChunks(name, options = {}) {
     const response = await fetch(`${API_BASE_URL}/api/datasets/collections/${encodeURIComponent(name)}/chunks?${params}`);
 
     if (!response.ok) {
-        throw new Error('获取集合切片失败');
+        throw new Error('Failed to fetch collection chunks');
     }
 
     return response.json();
@@ -125,7 +125,7 @@ export async function deleteCollection(name) {
 
     if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.detail || '删除集合失败');
+        throw new Error(error.detail || 'Failed to delete collection');
     }
 
     return response.json();
@@ -136,7 +136,7 @@ export async function deleteCollection(name) {
  */
 export async function getActiveCollections() {
     const response = await fetch(`${API_BASE_URL}/api/datasets/collections/active`);
-    if (!response.ok) throw new Error('获取活跃集合失败');
+    if (!response.ok) throw new Error('Failed to fetch active collections');
     return response.json(); // { active: string[] }
 }
 
@@ -150,7 +150,7 @@ export async function toggleCollection(name) {
     );
     if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.detail || '操作失败');
+        throw new Error(error.detail || 'Operation failed');
     }
     return response.json(); // { name, active: bool }
 }

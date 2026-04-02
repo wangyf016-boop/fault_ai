@@ -8,7 +8,7 @@ const normalizeBaseUrl = (url) => {
 export async function getLLMConfig() {
     const response = await fetch(`${API_BASE_URL}/settings/llm`);
     if (!response.ok) {
-        throw new Error('获取配置失败');
+        throw new Error('Failed to fetch configuration');
     }
     return response.json();
 }
@@ -20,7 +20,7 @@ export async function saveLLMConfig(config) {
         body: JSON.stringify(config),
     });
     if (!response.ok) {
-        throw new Error('保存配置失败');
+        throw new Error('Failed to save configuration');
     }
     return response.json();
 }
@@ -32,7 +32,7 @@ export async function testLLMConnection(config) {
         body: JSON.stringify(config),
     });
     if (!response.ok) {
-        throw new Error('测试请求失败');
+        throw new Error('Connection test request failed');
     }
     return response.json();
 }
@@ -53,7 +53,7 @@ export async function testOllamaConnection(config) {
         if (!response.ok) {
             return {
                 success: false,
-                error: `Ollama 返回状态码 ${response.status}`,
+                error: `Ollama returned status code ${response.status}`,
             };
         }
 
@@ -67,8 +67,8 @@ export async function testOllamaConnection(config) {
                 success: found,
                 modelFound: found,
                 response: found
-                    ? `已连接，模型 ${targetModel} 可用`
-                    : `已连接，但未找到模型 ${targetModel}`,
+                    ? `Connected. Model ${targetModel} is available`
+                    : `Connected, but model ${targetModel} was not found`,
                 models: modelNames,
             };
         }
@@ -76,15 +76,15 @@ export async function testOllamaConnection(config) {
         return {
             success: true,
             modelFound: true,
-            response: '已连接，Ollama 服务可用',
+            response: 'Connected. Ollama service is available',
             models: modelNames,
         };
     } catch (error) {
         clearTimeout(timeoutId);
         if (error?.name === 'AbortError') {
-            return { success: false, error: '连接超时，请检查 Ollama 服务或网络' };
+            return { success: false, error: 'Connection timed out. Please check the Ollama service or network.' };
         }
-        return { success: false, error: error?.message || '无法连接到 Ollama 服务' };
+        return { success: false, error: error?.message || 'Unable to connect to Ollama service' };
     }
 }
 
@@ -93,7 +93,7 @@ export async function testOllamaConnection(config) {
 export async function getPromptsConfig() {
     const response = await fetch(`${API_BASE_URL}/settings/prompts`);
     if (!response.ok) {
-        throw new Error('获取提示词配置失败');
+        throw new Error('Failed to fetch prompt configuration');
     }
     return response.json();
 }
@@ -105,7 +105,7 @@ export async function savePromptsConfig(config) {
         body: JSON.stringify(config),
     });
     if (!response.ok) {
-        throw new Error('保存提示词配置失败');
+        throw new Error('Failed to save prompt configuration');
     }
     return response.json();
 }
@@ -115,7 +115,7 @@ export async function resetPromptsConfig() {
         method: 'POST',
     });
     if (!response.ok) {
-        throw new Error('重置提示词失败');
+        throw new Error('Failed to reset prompts');
     }
     return response.json();
 }

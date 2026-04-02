@@ -15,12 +15,12 @@ const NODE_COLORS = {
 
 // 类型显示映射
 const TYPE_LABELS = {
-  Problem: '问题',
-  Cause: '原因',
-  Solution: '解决方案',
-  Area: '区域',
-  Equipment: '设备',
-  Component: '部件'
+  Problem: 'Problem',
+  Cause: 'Cause',
+  Solution: 'Solution',
+  Area: 'Area',
+  Equipment: 'Equipment',
+  Component: 'Component'
 };
 
 const TYPE_LEVELS = {
@@ -125,7 +125,7 @@ function extractPhenomenon(description) {
 
 // 从节点中提取显示名称
 function extractDisplayName(node) {
-  if (!node) return '未知';
+  if (!node) return 'Unknown';
   
   // 获取节点类型
   const nodeType = node.type || node.labels?.[0];
@@ -145,7 +145,7 @@ function extractDisplayName(node) {
   if (node.props?.description) return node.props.description;
   if (node.properties?.description) return node.properties.description;
   
-  return '未知';
+  return 'Unknown';
 }
 
 // 截断文本
@@ -633,7 +633,7 @@ function buildCypherPreview(keyword, structuredFilters) {
   return [
     'MATCH path = (a:Area)-[:INCLUDE]->(e:Equipment)-[:HAS_PART]->(c:Component)',
     '             -[:HAS_FAULT]->(p:Problem)-[:CAUSED_BY]->(ca:Cause)-[:SOLVED_BY]->(s:Solution)',
-    `// 原始问题: ${phrase || '（空）'}`,
+    `// Original query: ${phrase || '(empty)'}`,
     ...whereLines,
     'WITH path,',
     '     r1, r2, r3, r4,',
@@ -650,12 +650,12 @@ function buildCypherPreview(keyword, structuredFilters) {
 
 function getStructuredFilterChips(structuredFilters) {
   const labels = {
-    area: '区域',
-    equipment: '设备/工位',
-    component: '部件/功能点',
-    problem: '问题',
-    cause: '原因',
-    solution: '解决方案',
+    area: 'Area',
+    equipment: 'Equipment/Station',
+    component: 'Component/Function',
+    problem: 'Problem',
+    cause: 'Cause',
+    solution: 'Solution',
   };
 
   return Object.entries(structuredFilters || {})
@@ -691,7 +691,7 @@ export default function Neo4jGraph({
   const initialQueryMode = String(defaultQueryMode || 'exact').trim().toLowerCase() === 'normal' ? 'normal' : 'exact';
 
   const [loading, setLoading] = useState(false);
-  const [loadingText, setLoadingText] = useState('正在加载图谱...');
+  const [loadingText, setLoadingText] = useState('Loading graph...');
   const [loadingProgress, setLoadingProgress] = useState(8);
   const [error, setError] = useState(null);
   const [searchInput, setSearchInput] = useState(initialKeyword);
@@ -836,7 +836,7 @@ export default function Neo4jGraph({
       return response;
     } catch (err) {
       if (err.name === 'AbortError') {
-        throw new Error('图谱查询超时，请缩小关键词后重试');
+        throw new Error('Graph query timed out. Please narrow the keyword and try again.');
       }
       throw err;
     } finally {
@@ -1130,12 +1130,12 @@ export default function Neo4jGraph({
     } else {
       // 展开：获取邻居节点
       setLoading(true);
-      setLoadingText('正在展开关联节点...');
+      setLoadingText('Expanding related nodes...');
       setLoadingProgress(12);
       try {
         const encodedId = encodeURIComponent(nodeId);
         const res = await fetchWithTimeout(buildApiUrl(`/graph/node/${encodedId}/neighbors?limit=20`));
-        if (!res.ok) throw new Error('获取邻居节点失败');
+        if (!res.ok) throw new Error('Failed to fetch neighbor nodes');
         const data = await res.json();
 
         const newNodes = [];
@@ -1209,7 +1209,7 @@ export default function Neo4jGraph({
         });
       } catch (err) {
         console.error('展开节点失败:', err);
-        setError(err.message || '展开节点失败');
+        setError(err.message || 'Failed to expand node');
       } finally {
         setLoading(false);
       }
@@ -1241,7 +1241,7 @@ export default function Neo4jGraph({
     }
 
     setLoading(true);
-    setLoadingText('正在按原始CSV整行链路搜索...');
+    setLoadingText('Searching by full original CSV row path...');
     setLoadingProgress(10);
     setError(null);
     clearGraph();
@@ -1269,9 +1269,9 @@ export default function Neo4jGraph({
       url = `${buildApiUrl('/graph/search')}?${params.toString()}`;
 
       const res = await fetchWithTimeout(url);
-      if (!res.ok) throw new Error(`请求失败: ${res.status}`);
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       if (!isLatestGraphRequest(reqSeq)) return;
-      setLoadingText('正在渲染原始CSV整行链路...');
+      setLoadingText('Rendering full original CSV row path...');
       setLoadingProgress(72);
       const data = await res.json();
       if (!isLatestGraphRequest(reqSeq)) return;
@@ -1288,7 +1288,7 @@ export default function Neo4jGraph({
       console.error('加载图数据失败:', err);
       if (isLatestGraphRequest(reqSeq)) {
         clearGraph();
-        setError(err.message || '加载失败');
+        setError(err.message || 'Load failed');
       }
     } finally {
       if (isLatestGraphRequest(reqSeq)) {
@@ -1327,7 +1327,7 @@ export default function Neo4jGraph({
     }
 
     setLoading(true);
-    setLoadingText('正在按原始CSV整行链路反查...');
+    setLoadingText('Reverse searching by full original CSV row path...');
     setLoadingProgress(10);
     setError(null);
     clearGraph();
@@ -1348,9 +1348,9 @@ export default function Neo4jGraph({
           include_total: true,
         }),
       });
-      if (!res.ok) throw new Error(`请求失败: ${res.status}`);
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
       if (!isLatestGraphRequest(reqSeq)) return;
-      setLoadingText('正在渲染原始CSV整行链路...');
+      setLoadingText('Rendering full original CSV row path...');
       setLoadingProgress(72);
       const data = await res.json();
       if (!isLatestGraphRequest(reqSeq)) return;
@@ -1362,7 +1362,7 @@ export default function Neo4jGraph({
       if (!data.nodes || data.nodes.length === 0) {
         if (isLatestGraphRequest(reqSeq)) {
           clearGraph();
-          setError('未找到相近链路');
+          setError('No similar path found');
         }
         return;
       }
@@ -1375,7 +1375,7 @@ export default function Neo4jGraph({
       console.error('记录反查图数据失败:', err);
       if (isLatestGraphRequest(reqSeq)) {
         clearGraph();
-        setError(err.message || '加载失败');
+        setError(err.message || 'Load failed');
       }
     } finally {
       if (isLatestGraphRequest(reqSeq)) {
@@ -1389,7 +1389,7 @@ export default function Neo4jGraph({
   const renderGraphData = useCallback((data) => {
     if (!data.nodes || data.nodes.length === 0) {
       clearGraph();
-      setError('未找到对应的原始CSV整行链路');
+      setError('No matching full original CSV row path found');
       return;
     }
 
@@ -1531,7 +1531,7 @@ export default function Neo4jGraph({
       return { localOnly: true };
     }
     if (!res.ok) {
-      throw new Error(`保存失败: ${res.status}`);
+      throw new Error(`Save failed: ${res.status}`);
     }
     return { localOnly: false };
   }, [fetchWithTimeout]);
@@ -1545,7 +1545,7 @@ export default function Neo4jGraph({
       return { localOnly: true };
     }
     if (!res.ok) {
-      throw new Error(`删除失败: ${res.status}`);
+      throw new Error(`Delete failed: ${res.status}`);
     }
     return { localOnly: false };
   }, [fetchWithTimeout]);
@@ -1566,7 +1566,7 @@ export default function Neo4jGraph({
     });
     if (res.status === 404 || res.status === 405) return { localOnly: true, notFound: true };
     if (res.status === 409) return { localOnly: false, conflict: true };
-    if (!res.ok) throw new Error(`删除失败: ${res.status}`);
+    if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
     return { localOnly: false };
   }, [fetchWithTimeout]);
 
@@ -1582,12 +1582,12 @@ export default function Neo4jGraph({
     });
 
     if (!res.ok) {
-      throw new Error(await parseApiError(res, '创建节点失败'));
+      throw new Error(await parseApiError(res, 'Failed to create node'));
     }
     const data = await res.json().catch(() => null);
     const nodeId = data?.id ? String(data.id) : '';
     if (!nodeId) {
-      throw new Error(`创建节点失败 (HTTP ${res.status}): missing node id`);
+      throw new Error(`Failed to create node (HTTP ${res.status}): missing node id`);
     }
     return {
       nodeId,
@@ -1607,12 +1607,12 @@ export default function Neo4jGraph({
     });
 
     if (!res.ok) {
-      throw new Error(await parseApiError(res, '创建关系失败'));
+      throw new Error(await parseApiError(res, 'Failed to create relationship'));
     }
     const data = await res.json().catch(() => null);
     const edgeId = data?.id ? String(data.id) : '';
     if (!edgeId) {
-      throw new Error(`创建关系失败 (HTTP ${res.status}): missing edge id`);
+      throw new Error(`Failed to create relationship (HTTP ${res.status}): missing edge id`);
     }
     return { edgeId };
   }, [fetchWithTimeout]);
@@ -1631,7 +1631,7 @@ export default function Neo4jGraph({
       return { localOnly: true };
     }
     if (!res.ok) {
-      throw new Error(`删除关系失败: ${res.status}`);
+      throw new Error(`Failed to delete relationship: ${res.status}`);
     }
     return { localOnly: false };
   }, [fetchWithTimeout]);
@@ -1705,7 +1705,7 @@ export default function Neo4jGraph({
       try {
         edgesDataSet.current?.add(optimisticEdge);
       } catch (e) {
-        setMutationNotice({ type: 'error', text: e?.message || '前端关系渲染失败，请重试' });
+        setMutationNotice({ type: 'error', text: e?.message || 'Failed to render relationship on frontend. Please try again.' });
         return;
       }
       setAllGraphEdges((prev) => [...prev, optimisticEdge]);
@@ -1768,7 +1768,7 @@ export default function Neo4jGraph({
       nodesDataSet.current?.add(newNode);
       edgesDataSet.current?.add(newEdge);
     } catch (e) {
-      setMutationNotice({ type: 'error', text: e?.message || '前端节点渲染失败，请重试' });
+      setMutationNotice({ type: 'error', text: e?.message || 'Failed to render node on frontend. Please try again.' });
       return;
     }
     setAllGraphNodes((prev) => [...prev, newNode]);
@@ -1908,7 +1908,7 @@ export default function Neo4jGraph({
     const nextName = (editNodeForm.name || '').trim();
     const nextDescription = String(editNodeForm.description || '').trim();
     if (!nextName) {
-      setMutationNotice({ type: 'error', text: '名称不能为空' });
+      setMutationNotice({ type: 'error', text: 'Name cannot be empty' });
       return;
     }
 
@@ -1924,13 +1924,13 @@ export default function Neo4jGraph({
     // 默认按路径修改：仅迁移当前所选路径上该节点关联的关系
     if (editScope === 'path') {
       if (!selectedPathId) {
-        setMutationNotice({ type: 'error', text: '请先在 Paths 中选中具体路径，再执行“按路径修改”' });
+        setMutationNotice({ type: 'error', text: 'Please select a specific path in Paths before applying path-based edit.' });
         return;
       }
 
       const pathEntry = allPathEntries.find((entry) => entry.id === selectedPathId);
       if (!pathEntry) {
-        setMutationNotice({ type: 'error', text: '未找到选中的路径，请重新选择' });
+        setMutationNotice({ type: 'error', text: 'Selected path not found. Please select again.' });
         return;
       }
 
@@ -1942,11 +1942,11 @@ export default function Neo4jGraph({
       });
 
       if (connectedPathEdges.length === 0) {
-        setMutationNotice({ type: 'error', text: '当前路径上未找到该节点可迁移的关系，请改用“全局修改”' });
+        setMutationNotice({ type: 'error', text: 'No migratable relationships found for this node in current path. Please use global edit.' });
         return;
       }
 
-      setMutationNotice({ type: 'info', text: '正在按路径拆分节点并迁移关系...' });
+      setMutationNotice({ type: 'info', text: 'Splitting node by path and migrating relationships...' });
       
       // 为此次按路径修改生成唯一的 operation_group_id
       const operationGroupId = `op-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -1955,7 +1955,7 @@ export default function Neo4jGraph({
       try {
         const createResult = await persistNodeCreate({ type: nextType, name: nextName, description: nextDescription }, operationGroupId, operationType);
         if (createResult.localOnly || !createResult.nodeId) {
-          throw new Error('后端不支持按路径拆分，请改用全局修改');
+          throw new Error('Backend does not support path-based split. Please use global edit.');
         }
         const newNodeId = String(createResult.nodeId);
         const targetNodeReused = Boolean(createResult.deduplicated);
@@ -1983,14 +1983,14 @@ export default function Neo4jGraph({
             properties: relProps,
           }, operationGroupId, operationType);
           if (createEdgeRes.localOnly) {
-            throw new Error('后端不支持关系迁移，已中止');
+            throw new Error('Backend does not support relationship migration. Aborted.');
           }
 
           const oldEdgeId = String(edge.id || '');
           if (oldEdgeId) {
             const delRes = await persistEdgeDelete(oldEdgeId, operationGroupId, operationType);
             if (delRes.localOnly) {
-              throw new Error('后端不支持关系删除，已中止');
+              throw new Error('Backend does not support relationship deletion. Aborted.');
             }
           }
         }
@@ -2002,7 +2002,7 @@ export default function Neo4jGraph({
           // 旧节点仍被其它路径引用时会保留，属于预期
         }
 
-        setMutationNotice({ type: 'success', text: `按路径修改完成：已拆分节点并迁移 ${connectedPathEdges.length} 条关系` });
+        setMutationNotice({ type: 'success', text: `Path-based edit completed: split node and migrated ${connectedPathEdges.length} relationships` });
         setIsEditingNode(false);
         if (embedded) EMBEDDED_GRAPH_CACHE.clear();
         if (useRecordsRoute) {
@@ -2012,7 +2012,7 @@ export default function Neo4jGraph({
         }
         return;
       } catch (err) {
-        setMutationNotice({ type: 'error', text: err.message || '按路径修改失败，请在“修改历史”中回滚' });
+        setMutationNotice({ type: 'error', text: err.message || 'Path-based edit failed. Please roll back in Mutation History.' });
         return;
       }
     }
@@ -2030,7 +2030,7 @@ export default function Neo4jGraph({
     nodesDataSet.current?.update(optimisticNode);
     setAllGraphNodes((prev) => prev.map((item) => (String(item.id) === nodeId ? { ...item, ...optimisticNode } : item)));
     setSelectedNode(optimisticNode);
-    setMutationNotice({ type: 'info', text: '正在保存...' });
+    setMutationNotice({ type: 'info', text: 'Saving...' });
 
     try {
       const persisted = await persistNodeUpdate(nodeId, {
@@ -2040,16 +2040,16 @@ export default function Neo4jGraph({
       });
 
       if (persisted.localOnly) {
-        setMutationNotice({ type: 'warn', text: '已在前端更新（后端未提供节点编辑接口）' });
+        setMutationNotice({ type: 'warn', text: 'Updated on frontend only (backend node edit API is unavailable)' });
       } else {
-        setMutationNotice({ type: 'success', text: '保存成功' });
+        setMutationNotice({ type: 'success', text: 'Saved successfully' });
       }
       setIsEditingNode(false);
     } catch (err) {
       nodesDataSet.current?.update(oldNode);
       setAllGraphNodes((prev) => prev.map((item) => (String(item.id) === nodeId ? oldNode : item)));
       setSelectedNode(oldNode);
-      setMutationNotice({ type: 'error', text: err.message || '保存失败，已回滚' });
+      setMutationNotice({ type: 'error', text: err.message || 'Save failed, rolled back' });
     }
   }, [
     editNodeForm,
@@ -2083,7 +2083,7 @@ export default function Neo4jGraph({
       filter: (edge) => String(edge.from) === nodeId || String(edge.to) === nodeId,
     }) || [];
 
-    const confirmed = window.confirm(`确认删除节点「${extractDisplayName(nodeBackup.rawData || nodeBackup)}」？`);
+    const confirmed = window.confirm(`Confirm deletion of node "${extractDisplayName(nodeBackup.rawData || nodeBackup)}"?`);
     if (!confirmed) return;
 
     nodesDataSet.current?.remove(nodeId);
@@ -2104,14 +2104,14 @@ export default function Neo4jGraph({
     setSelectedEdge(null);
     setSelectedNodeFilterId(null);
     setSelectedPathId(null);
-    setMutationNotice({ type: 'info', text: '正在删除...' });
+    setMutationNotice({ type: 'info', text: 'Deleting...' });
 
     try {
       const persisted = await persistNodeDelete(nodeId);
       if (persisted.localOnly) {
-        setMutationNotice({ type: 'warn', text: '已在前端删除（后端未提供节点删除接口）' });
+        setMutationNotice({ type: 'warn', text: 'Deleted on frontend only (backend node delete API is unavailable)' });
       } else {
-        setMutationNotice({ type: 'success', text: '删除成功' });
+        setMutationNotice({ type: 'success', text: 'Deleted successfully' });
       }
     } catch (err) {
       nodesDataSet.current?.add(nodeBackup);
@@ -2121,7 +2121,7 @@ export default function Neo4jGraph({
       setAllGraphNodes((prev) => [...prev, nodeBackup]);
       setAllGraphEdges((prev) => [...prev, ...relatedEdges]);
       setSelectedNode(nodeBackup);
-      setMutationNotice({ type: 'error', text: err.message || '删除失败，已回滚' });
+      setMutationNotice({ type: 'error', text: err.message || 'Delete failed, rolled back' });
     }
   }, [persistNodeDelete, selectedNode]);
 
@@ -2129,17 +2129,17 @@ export default function Neo4jGraph({
     if (!selectedEdge) return;
     const edgeId = String(selectedEdge.id || '');
     if (!edgeId) {
-      setMutationNotice({ type: 'error', text: '当前关系缺少ID，无法删除' });
+      setMutationNotice({ type: 'error', text: 'Current relationship has no ID and cannot be deleted' });
       return;
     }
 
     const edgeBackup = edgesDataSet.current?.get(edgeId);
     if (!edgeBackup) {
-      setMutationNotice({ type: 'error', text: '未找到要删除的关系' });
+      setMutationNotice({ type: 'error', text: 'Relationship to delete was not found' });
       return;
     }
 
-    const confirmed = window.confirm(`确认删除关系「${edgeBackup.label || 'RELATION'}」？`);
+    const confirmed = window.confirm(`Confirm deletion of relationship "${edgeBackup.label || 'RELATION'}"?`);
     if (!confirmed) return;
 
     edgesDataSet.current?.remove(edgeId);
@@ -2149,20 +2149,20 @@ export default function Neo4jGraph({
       return { ...entry, edgeIds: nextEdgeIds };
     }).filter((entry) => entry.edgeIds.size > 0));
     setSelectedEdge(null);
-    setMutationNotice({ type: 'info', text: '正在删除关系...' });
+    setMutationNotice({ type: 'info', text: 'Deleting relationship...' });
 
     try {
       const persisted = await persistEdgeDelete(edgeId);
       if (persisted.localOnly) {
-        setMutationNotice({ type: 'warn', text: '关系已在前端删除（后端未提供关系删除接口）' });
+        setMutationNotice({ type: 'warn', text: 'Relationship deleted on frontend only (backend relationship delete API is unavailable)' });
       } else {
-        setMutationNotice({ type: 'success', text: '关系删除成功' });
+        setMutationNotice({ type: 'success', text: 'Relationship deleted successfully' });
       }
     } catch (err) {
       edgesDataSet.current?.add(edgeBackup);
       setAllGraphEdges((prev) => [...prev, edgeBackup]);
       setSelectedEdge(edgeBackup);
-      setMutationNotice({ type: 'error', text: err.message || '关系删除失败，已回滚' });
+      setMutationNotice({ type: 'error', text: err.message || 'Relationship delete failed, rolled back' });
     }
   }, [persistEdgeDelete, selectedEdge]);
 
@@ -2170,28 +2170,28 @@ export default function Neo4jGraph({
     setLoadingMutations(true);
     try {
       const res = await fetchWithTimeout(buildApiUrl('/graph/mutations?limit=100'));
-      if (!res.ok) throw new Error(`获取修改历史失败: ${res.status}`);
+      if (!res.ok) throw new Error(`Failed to fetch mutation history: ${res.status}`);
       const data = await res.json();
       const items = Array.isArray(data?.items) ? [...data.items] : [];
       items.sort((a, b) => String(b?.timestamp || '').localeCompare(String(a?.timestamp || '')));
       setMutationLogs(items);
     } catch (err) {
-      setMutationNotice({ type: 'error', text: err.message || '获取修改历史失败' });
+      setMutationNotice({ type: 'error', text: err.message || 'Failed to fetch mutation history' });
     } finally {
       setLoadingMutations(false);
     }
   }, [fetchWithTimeout]);
 
   const handleClearMutationLogs = useCallback(async () => {
-    const confirmed = window.confirm('确认清空修改历史？该操作不可撤销。');
+    const confirmed = window.confirm('Confirm clearing mutation history? This action cannot be undone.');
     if (!confirmed) return;
     try {
       const res = await fetchWithTimeout(buildApiUrl('/graph/mutations'), { method: 'DELETE' });
-      if (!res.ok) throw new Error(`清空修改历史失败: ${res.status}`);
+      if (!res.ok) throw new Error(`Failed to clear mutation history: ${res.status}`);
       setMutationLogs([]);
-      setMutationNotice({ type: 'success', text: '修改历史已清空' });
+      setMutationNotice({ type: 'success', text: 'Mutation history cleared' });
     } catch (err) {
-      setMutationNotice({ type: 'error', text: err.message || '清空修改历史失败' });
+      setMutationNotice({ type: 'error', text: err.message || 'Failed to clear mutation history' });
     }
   }, [fetchWithTimeout]);
 
@@ -2207,20 +2207,20 @@ export default function Neo4jGraph({
     const id = String(mutationId || '').trim();
     if (!id) return;
 
-    const confirmed = window.confirm(`确认回滚这条修改记录？\nmutation_id=${id}`);
+    const confirmed = window.confirm(`Confirm rollback of this mutation record?\nmutation_id=${id}`);
     if (!confirmed) return;
 
     setRollbackingMutationId(id);
-    setMutationNotice({ type: 'info', text: '正在回滚修改...' });
+    setMutationNotice({ type: 'info', text: 'Rolling back mutation...' });
     try {
       const res = await fetchWithTimeout(buildApiUrl(`/graph/mutations/${encodeURIComponent(id)}/rollback`), {
         method: 'POST',
       });
-      if (!res.ok) throw new Error(`回滚失败: ${res.status}`);
-      setMutationNotice({ type: 'success', text: '回滚成功，建议点击搜索重新加载图谱' });
+      if (!res.ok) throw new Error(`Rollback failed: ${res.status}`);
+      setMutationNotice({ type: 'success', text: 'Rollback succeeded. Click Search to reload graph.' });
       await loadMutationLogs();
     } catch (err) {
-      setMutationNotice({ type: 'error', text: err.message || '回滚失败' });
+      setMutationNotice({ type: 'error', text: err.message || 'Rollback failed' });
     } finally {
       setRollbackingMutationId(null);
     }
@@ -2235,21 +2235,21 @@ export default function Neo4jGraph({
 
     const actionsList = groupMutations.map((m) => m.action).join(', ');
     const confirmed = window.confirm(
-      `确认一键回滚此操作组？\n操作数: ${groupMutations.length}\n操作: ${actionsList}\n\n此操作不可撤销，请谨慎！`
+      `Confirm one-click rollback of this operation group?\nOperations: ${groupMutations.length}\nActions: ${actionsList}\n\nThis action cannot be undone.`
     );
     if (!confirmed) return;
 
     setRollbackingMutationId(id);
-    setMutationNotice({ type: 'info', text: '正在回滚操作组...' });
+    setMutationNotice({ type: 'info', text: 'Rolling back operation group...' });
     try {
       const res = await fetchWithTimeout(buildApiUrl(`/graph/mutations/${encodeURIComponent(id)}/rollback-group`), {
         method: 'POST',
       });
-      if (!res.ok) throw new Error(`组回滚失败: ${res.status}`);
-      setMutationNotice({ type: 'success', text: '操作组回滚成功，已重新加载修改历史' });
+      if (!res.ok) throw new Error(`Group rollback failed: ${res.status}`);
+      setMutationNotice({ type: 'success', text: 'Operation group rollback succeeded, mutation history reloaded' });
       await loadMutationLogs();
     } catch (err) {
-      setMutationNotice({ type: 'error', text: err.message || '操作组回滚失败' });
+      setMutationNotice({ type: 'error', text: err.message || 'Operation group rollback failed' });
     } finally {
       setRollbackingMutationId(null);
     }
@@ -2422,7 +2422,7 @@ useEffect(() => {
 
   const handleRefreshGraph = useCallback(async () => {
     setError(null);
-    setMutationNotice({ type: 'info', text: '正在刷新图谱...' });
+    setMutationNotice({ type: 'info', text: 'Refreshing graph...' });
     try {
       if (embedded) EMBEDDED_GRAPH_CACHE.clear();
       if (useRecordsRoute) {
@@ -2431,9 +2431,9 @@ useEffect(() => {
         const kw = (activeKeyword ?? searchInput ?? '').trim();
         await loadGraphData(kw, nodeLimit, structuredFilters);
       }
-      setMutationNotice({ type: 'success', text: '图谱已刷新' });
+      setMutationNotice({ type: 'success', text: 'Graph refreshed' });
     } catch (err) {
-      setMutationNotice({ type: 'error', text: err.message || '刷新失败' });
+      setMutationNotice({ type: 'error', text: err.message || 'Refresh failed' });
     }
   }, [embedded, useRecordsRoute, records, nodeLimit, activeKeyword, searchInput, structuredFilters, loadGraphFromRecords, loadGraphData]);
 
@@ -2485,10 +2485,10 @@ useEffect(() => {
       {/* 头部 */}
       <div className={`flex items-center justify-between p-3 ${isLight ? 'border-b border-slate-200' : 'border-b border-gray-700'}`}>
         <div className="flex items-center gap-2">
-          <h3 className={`${isLight ? 'text-slate-800' : 'text-white'} font-medium`}>知识图谱</h3>
+          <h3 className={`${isLight ? 'text-slate-800' : 'text-white'} font-medium`}>Knowledge Graph</h3>
           {mode === 'records' && (
             <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-700 text-emerald-100">
-              记录反查
+              Record Reverse Lookup
             </span>
           )}
           {mode === 'keyword' && allowKeywordSearch && (
@@ -2507,7 +2507,7 @@ useEffect(() => {
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="输入关键词..."
+                  placeholder="Enter keyword..."
                   className={`bg-transparent text-sm py-1 px-2 w-40 outline-none ${isLight ? 'text-slate-700 placeholder:text-slate-400' : 'text-white'}`}
                 />
               </div>
@@ -2516,7 +2516,7 @@ useEffect(() => {
                 className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs border ${isLight ? 'bg-white border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-800 border-gray-700 text-gray-200 hover:text-white'}`}
               >
                 <Search size={14} />
-                搜索
+                Search
               </button>
             </form>
           )}
@@ -2536,7 +2536,7 @@ useEffect(() => {
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs border ${isLight ? 'bg-white border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-800 border-gray-700 text-gray-200 hover:text-white'}`}
           >
             <Plus size={14} />
-            新增节点
+            Add Node
           </button>
 
           <button
@@ -2545,7 +2545,7 @@ useEffect(() => {
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs border ${isLight ? 'bg-white border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-800 border-gray-700 text-gray-200 hover:text-white'}`}
           >
             <History size={14} />
-            修改历史
+            Mutation History
           </button>
 
           <button
@@ -2555,7 +2555,7 @@ useEffect(() => {
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs border disabled:opacity-60 disabled:cursor-not-allowed ${isLight ? 'bg-white border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-800 border-gray-700 text-gray-200 hover:text-white'}`}
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            刷新
+            Refresh
           </button>
 
           {isRecordsContext && (
@@ -2563,10 +2563,10 @@ useEffect(() => {
               value={queryMode}
               onChange={(e) => setQueryMode(String(e.target.value || 'exact'))}
               className={`${isLight ? 'bg-slate-100 text-slate-700 border border-slate-200' : 'bg-gray-800 text-white'} text-sm rounded px-2 py-1 outline-none`}
-              title="查询模式"
+              title="Query mode"
             >
-              <option value="exact">精确模式</option>
-              <option value="normal">普通模式</option>
+              <option value="exact">Exact mode</option>
+              <option value="normal">Normal mode</option>
             </select>
           )}
 
@@ -2576,10 +2576,10 @@ useEffect(() => {
             onChange={(e) => setNodeLimit(Number(e.target.value))}
             disabled={isRecordsContext && queryMode === 'exact'}
             className={`${isLight ? 'bg-slate-100 text-slate-700 border border-slate-200' : 'bg-gray-800 text-white'} text-sm rounded px-2 py-1 outline-none disabled:opacity-50 disabled:cursor-not-allowed`}
-            title={isRecordsContext && queryMode === 'exact' ? '精确模式下数量固定为匹配结果，无法手动调整' : '节点数量上限'}
+            title={isRecordsContext && queryMode === 'exact' ? 'In exact mode, count is fixed by matched result and cannot be adjusted manually' : 'Node count limit'}
           >
             {normalizedLimitOptions.map((opt) => (
-              <option key={opt} value={opt}>{opt}条</option>
+              <option key={opt} value={opt}>{opt} items</option>
             ))}
           </select>
 
@@ -2613,8 +2613,8 @@ useEffect(() => {
                 ? (isLight ? 'bg-slate-100 border-slate-300 text-slate-400' : 'bg-gray-800 border-gray-700 text-gray-500')
                 : (isLight ? 'bg-white border-slate-200 text-slate-600 hover:border-orange-300' : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-500')}`}
             title={(selectedNodeTypeOnly === type)
-              ? `已仅显示${TYPE_LABELS[type] || type}，再点恢复全部`
-              : `点击后仅显示${TYPE_LABELS[type] || type}`}
+              ? `Only showing ${TYPE_LABELS[type] || type}. Click again to restore all.`
+              : `Click to show only ${TYPE_LABELS[type] || type}`}
           >
             <span
               className="w-3 h-3 rounded-full"
@@ -2629,11 +2629,11 @@ useEffect(() => {
             onClick={clearNodeTypeFilter}
             className={`text-[11px] px-2 py-1 rounded border ${isLight ? 'bg-white border-slate-200 text-slate-600 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-900 border-gray-700 text-gray-300 hover:text-white'}`}
           >
-            显示全部类型
+            Show all types
           </button>
         )}
         <span className={`${isLight ? 'text-slate-400' : 'text-gray-500'}`}></span>
-        <span className={`${isLight ? 'text-slate-400' : 'text-gray-500'} ml-auto`}>当前为原始CSV整行模式</span>
+        <span className={`${isLight ? 'text-slate-400' : 'text-gray-500'} ml-auto`}>Current mode: full original CSV row</span>
       </div>
 
       {allowKeywordSearch && cypherPreview && (
@@ -2645,7 +2645,7 @@ useEffect(() => {
           >
             <div className="flex items-center gap-2">
               <span className={`text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                {executedCypher ? '实际执行 Cypher' : '查询语句预览'}（点击展开）
+                {executedCypher ? 'Executed Cypher' : 'Query preview'} (click to expand)
               </span>
               {queryTrace && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-400/20">
@@ -2669,7 +2669,7 @@ useEffect(() => {
 
       {allowKeywordSearch && mode === 'keyword' && (
         <div className={`px-3 py-2 ${isLight ? 'border-b border-slate-200 bg-slate-50/70' : 'border-b border-gray-700 bg-gray-900/70'}`}>
-          <div className={`text-[11px] mb-2 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>问题拆解结果（可手工修改）</div>
+          <div className={`text-[11px] mb-2 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>Parsed query fields (editable)</div>
           <div className="flex flex-wrap gap-2 mb-3">
             {structuredFilterChips.length > 0 ? structuredFilterChips.map((item) => (
               <span
@@ -2680,17 +2680,17 @@ useEffect(() => {
                 <span>{item.value}</span>
               </span>
             )) : (
-              <span className={`text-[11px] ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>当前未自动识别到明确条件，可手工填写。</span>
+              <span className={`text-[11px] ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>No clear conditions were auto-detected. You can fill them manually.</span>
             )}
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {[
-              ['area', '区域'],
-              ['equipment', '设备/工位'],
-              ['component', '部件/功能点'],
-              ['problem', '问题'],
-              ['cause', '原因'],
-              ['solution', '解决方案'],
+              ['area', 'Area'],
+              ['equipment', 'Equipment/Station'],
+              ['component', 'Component/Function'],
+              ['problem', 'Problem'],
+              ['cause', 'Cause'],
+              ['solution', 'Solution'],
             ].map(([field, label]) => (
               <label key={field} className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
                 <span>{label}</span>
@@ -2710,7 +2710,7 @@ useEffect(() => {
               className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs border ${isLight ? 'bg-white border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-800 border-gray-700 text-gray-200 hover:text-white'}`}
             >
               <Search size={14} />
-              筛选搜索
+              Filter Search
             </button>
           </div>
         </div>
@@ -2729,7 +2729,7 @@ useEffect(() => {
 
           {!loading && allowKeywordSearch && mode === 'keyword' && !hasSearched && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className={`${isLight ? 'text-slate-500' : 'text-gray-300'} text-sm`}>请输入关键词后搜索</div>
+              <div className={`${isLight ? 'text-slate-500' : 'text-gray-300'} text-sm`}>Enter a keyword and search</div>
             </div>
           )}
 
@@ -2765,7 +2765,7 @@ useEffect(() => {
                   }}
                   className={`mt-2 px-3 py-1 rounded text-sm ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-700' : 'bg-gray-700 hover:bg-gray-600 text-white'}`}
                 >
-                  重试
+                  Retry
                 </button>
               </div>
             </div>
@@ -2774,7 +2774,7 @@ useEffect(() => {
           {isAddingNode && (
             <div className={`absolute top-4 right-4 z-20 w-[320px] rounded-lg p-3 shadow-lg ${isLight ? 'bg-white border border-slate-200' : 'bg-gray-800 border border-gray-700'}`}>
               <div className="flex items-center justify-between mb-2">
-                <h4 className={`${isLight ? 'text-slate-700' : 'text-gray-100'} text-sm font-semibold`}>新增节点</h4>
+                <h4 className={`${isLight ? 'text-slate-700' : 'text-gray-100'} text-sm font-semibold`}>Add Node</h4>
                 <button
                   type="button"
                   onClick={() => setIsAddingNode(false)}
@@ -2785,7 +2785,7 @@ useEffect(() => {
               </div>
               <div className="space-y-2">
                 <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  <span>名称</span>
+                  <span>Name</span>
                   <input
                     type="text"
                     value={addNodeForm.name}
@@ -2794,7 +2794,7 @@ useEffect(() => {
                   />
                 </label>
                 <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  <span>类型</span>
+                  <span>Type</span>
                   <select
                     value={addNodeForm.type}
                     onChange={(e) => {
@@ -2818,7 +2818,7 @@ useEffect(() => {
                   </select>
                 </label>
                 <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  <span>描述</span>
+                  <span>Description</span>
                   <input
                     type="text"
                     value={addNodeForm.description}
@@ -2827,7 +2827,7 @@ useEffect(() => {
                   />
                 </label>
                 <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  <span>源节点</span>
+                  <span>Source Node</span>
                   <select
                     value={addNodeForm.fromNodeId || ''}
                     onChange={(e) => {
@@ -2843,14 +2843,14 @@ useEffect(() => {
                     }}
                     className={`text-sm rounded px-2 py-1 outline-none border ${isLight ? 'bg-white text-slate-700 border-slate-200' : 'bg-gray-900 text-white border-gray-700'}`}
                   >
-                    <option value="">请选择源节点</option>
+                    <option value="">Please select a source node</option>
                     {allGraphNodes.map((node) => {
                       const nodeId = String(node?.id || '');
                       const nodeType = extractNodeTypeValue(node) || 'Unknown';
                       const nodeName = extractDisplayName(node?.rawData || node);
                       return (
                         <option key={nodeId} value={nodeId}>
-                          {nodeName}（{nodeType}）
+                          {nodeName} ({nodeType})
                         </option>
                       );
                     })}
@@ -2881,14 +2881,14 @@ useEffect(() => {
                     onClick={() => setIsAddingNode(false)}
                     className={`text-xs px-2.5 py-1 rounded border ${isLight ? 'bg-white text-slate-700 border-slate-200 hover:border-slate-300' : 'bg-gray-900 text-gray-200 border-gray-700 hover:text-white'}`}
                   >
-                    取消
+                    Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleCreateNode}
                     className={`text-xs px-2.5 py-1 rounded border ${isLight ? 'bg-white text-slate-700 border-slate-200 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-900 text-gray-200 border-gray-700 hover:text-white'}`}
                   >
-                    确认新增
+                    Confirm Add
                   </button>
                 </div>
               </div>
@@ -2898,21 +2898,21 @@ useEffect(() => {
           {showMutationPanel && (
             <div className={`absolute top-4 left-4 z-20 w-[520px] max-w-[92%] rounded-lg p-3 shadow-lg ${isLight ? 'bg-white border border-slate-200' : 'bg-gray-800 border border-gray-700'}`}>
               <div className="flex items-center justify-between mb-2">
-                <h4 className={`${isLight ? 'text-slate-700' : 'text-gray-100'} text-sm font-semibold`}>修改历史（可选回滚）</h4>
+                <h4 className={`${isLight ? 'text-slate-700' : 'text-gray-100'} text-sm font-semibold`}>Mutation History (optional rollback)</h4>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={loadMutationLogs}
                     className={`text-[11px] px-2 py-0.5 rounded border ${isLight ? 'bg-white text-slate-600 border-slate-200 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-900 text-gray-300 border-gray-700 hover:text-white'}`}
                   >
-                    刷新
+                    Refresh
                   </button>
                   <button
                     type="button"
                     onClick={handleClearMutationLogs}
                     className={`text-[11px] px-2 py-0.5 rounded border ${isLight ? 'bg-white text-red-600 border-red-200 hover:bg-red-50' : 'bg-gray-900 text-red-300 border-red-900/50 hover:text-red-200'}`}
                   >
-                    清空
+                    Clear
                   </button>
                   <button
                     type="button"
@@ -2925,16 +2925,16 @@ useEffect(() => {
               </div>
 
               <div className={`text-[11px] mb-2 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                选择一条记录后点击“回滚”，按 mutation_id 精确回滚。
+                Select one record and click "Rollback" to roll back precisely by mutation_id.
               </div>
 
               <div className={`max-h-64 overflow-auto space-y-2 pr-1 ${isLight ? 'text-slate-600' : 'text-gray-300'}`}>
                 {loadingMutations && (
-                  <div className={`text-xs ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>正在加载修改历史...</div>
+                  <div className={`text-xs ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>Loading mutation history...</div>
                 )}
 
                 {!loadingMutations && mutationLogs.length === 0 && (
-                  <div className={`text-xs ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>暂无可用修改记录</div>
+                  <div className={`text-xs ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>No mutation records available</div>
                 )}
 
                 {!loadingMutations && mutationLogs.length > 0 && (() => {
@@ -2954,7 +2954,7 @@ useEffect(() => {
                     <>
                       {Array.from(groups.entries()).map(([groupId, items]) => {
                         const operationType = String(items[0]?.operation_type || '').trim();
-                        const typeLabel = operationType === 'edit_node_by_path' ? '按路径修改节点' : '批量操作';
+                        const typeLabel = operationType === 'edit_node_by_path' ? 'Path-based node edit' : 'Batch operation';
                         const firstTime = String(items[0]?.timestamp || '');
                         const lastTime = String(items[items.length - 1]?.timestamp || '');
                         
@@ -2963,15 +2963,15 @@ useEffect(() => {
                             <div className="flex items-start justify-between gap-2 mb-2">
                               <div className="min-w-0 flex-1">
                                 <div className={`text-sm font-semibold ${isLight ? 'text-orange-900' : 'text-orange-200'}`}>{typeLabel}</div>
-                                <div className={`text-xs ${isLight ? 'text-orange-700' : 'text-orange-300'}`}>{items.length} 个操作 · {firstTime.slice(11, 19)} 到 {lastTime.slice(11, 19)}</div>
+                                <div className={`text-xs ${isLight ? 'text-orange-700' : 'text-orange-300'}`}>{items.length} operations · {firstTime.slice(11, 19)} to {lastTime.slice(11, 19)}</div>
                               </div>
                               <button type="button" disabled={rollbackingMutationId === groupId} onClick={() => handleRollbackMutationGroup(groupId)} className={`inline-flex items-center gap-1 text-[11px] px-2 py-1.5 rounded border font-medium whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed transition ${isLight ? 'bg-white text-red-700 border-red-300 hover:bg-red-50' : 'bg-red-900/40 text-red-200 border-red-700/60 hover:bg-red-900/60'}`}>
                                 <RotateCcw size={12} />
-                                {rollbackingMutationId === groupId ? '回滚中...' : '一键回滚'}
+                                {rollbackingMutationId === groupId ? 'Rolling back...' : 'Rollback all'}
                               </button>
                             </div>
                             <details className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                              <summary className="cursor-pointer mb-1 select-none">详细操作步骤</summary>
+                              <summary className="cursor-pointer mb-1 select-none">Detailed operation steps</summary>
                               <div className="space-y-1.5 ml-2 border-l-2 border-current pl-2 opacity-85">
                                 {items.map((item, idx) => {
                                   const action = String(item?.action || '').trim();
@@ -2988,21 +2988,21 @@ useEffect(() => {
 
                                   let desc = '';
                                   if (action === 'create_node') {
-                                    desc = `新增节点：${nodeName || '未命名'}${nodeLabel ? `（${nodeLabel}）` : ''}`;
+                                    desc = `Add node: ${nodeName || 'Unnamed'}${nodeLabel ? ` (${nodeLabel})` : ''}`;
                                   } else if (action === 'delete_node') {
-                                    desc = `删除节点：${nodeName || '未命名'}${nodeLabel ? `（${nodeLabel}）` : ''}`;
+                                    desc = `Delete node: ${nodeName || 'Unnamed'}${nodeLabel ? ` (${nodeLabel})` : ''}`;
                                   } else if (action === 'update_node') {
                                     if (beforeName && afterName && beforeName !== afterName) {
-                                      desc = `名称变更：${beforeName} → ${afterName}`;
+                                      desc = `Name changed: ${beforeName} → ${afterName}`;
                                     } else if (beforeLabel && afterLabel && beforeLabel !== afterLabel) {
-                                      desc = `类型变更：${beforeLabel} → ${afterLabel}`;
+                                      desc = `Type changed: ${beforeLabel} → ${afterLabel}`;
                                     } else {
-                                      desc = `更新节点：${afterName || beforeName || t?.node_id || '-'}`;
+                                      desc = `Update node: ${afterName || beforeName || t?.node_id || '-'}`;
                                     }
                                   } else if (action === 'create_edge') {
-                                    desc = `新增路径：${fromName || t?.from_id || '-'} → ${toName || t?.to_id || '-'}${relType ? `（${relType}）` : ''}`;
+                                    desc = `Add path: ${fromName || t?.from_id || '-'} → ${toName || t?.to_id || '-'}${relType ? ` (${relType})` : ''}`;
                                   } else if (action === 'delete_edge') {
-                                    desc = `删除路径：${fromName || t?.from_id || '-'} → ${toName || t?.to_id || '-'}${relType ? `（${relType}）` : ''}`;
+                                    desc = `Delete path: ${fromName || t?.from_id || '-'} → ${toName || t?.to_id || '-'}${relType ? ` (${relType})` : ''}`;
                                   } else {
                                     desc = `${action}: ${t?.node_id || t?.rel_id || '-'}`;
                                   }
@@ -3036,7 +3036,7 @@ useEffect(() => {
                               </div>
                               <button type="button" disabled={!mutationId || rollbackingMutationId === mutationId} onClick={() => handleRollbackMutation(mutationId)} className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border disabled:opacity-60 disabled:cursor-not-allowed ${isLight ? 'bg-white text-red-600 border-red-200 hover:bg-red-50' : 'bg-gray-900 text-red-300 border-red-900/50 hover:text-red-200'}`}>
                                 <RotateCcw size={12} />
-                                {rollbackingMutationId === mutationId ? '回滚中...' : '回滚'}
+                                {rollbackingMutationId === mutationId ? 'Rolling back...' : 'Rollback'}
                               </button>
                             </div>
                           </div>
@@ -3066,7 +3066,7 @@ useEffect(() => {
                     onClick={() => setIsEditingNode(true)}
                     className={`text-[11px] px-2 py-0.5 rounded border ${isLight ? 'bg-white text-slate-600 border-slate-200 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-900 text-gray-300 border-gray-700 hover:text-white'}`}
                   >
-                    编辑
+                    Edit
                   </button>
                 ) : (
                   <button
@@ -3074,7 +3074,7 @@ useEffect(() => {
                     onClick={() => setIsEditingNode(false)}
                     className={`text-[11px] px-2 py-0.5 rounded border ${isLight ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-300' : 'bg-gray-900 text-gray-300 border-gray-700 hover:text-white'}`}
                   >
-                    取消
+                    Cancel
                   </button>
                 )}
                 <button
@@ -3082,7 +3082,7 @@ useEffect(() => {
                   onClick={handleDeleteNode}
                   className={`text-[11px] px-2 py-0.5 rounded border ${isLight ? 'bg-white text-red-600 border-red-200 hover:bg-red-50' : 'bg-gray-900 text-red-300 border-red-900/50 hover:text-red-200'}`}
                 >
-                  删除
+                  Delete
                 </button>
                 <button
                   onClick={() => setSelectedNode(null)}
@@ -3099,7 +3099,7 @@ useEffect(() => {
                 </div>
                 <div className={`text-xs space-y-1 ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
                   <div className="truncate">
-                    <span className={`${isLight ? 'text-slate-400' : 'text-gray-500'}`}>节点种类: </span>
+                    <span className={`${isLight ? 'text-slate-400' : 'text-gray-500'}`}>Node type: </span>
                     <span>{getTypeDisplayText(selectedNode.nodeType)}</span>
                   </div>
                   {selectedNode.rawData && Object.entries(selectedNode.rawData).filter(([k]) => !['id'].includes(k)).slice(0, 5).map(([k, v]) => (
@@ -3120,7 +3120,7 @@ useEffect(() => {
                       ? (isLight ? 'bg-orange-50 text-orange-700 border-orange-200' : 'bg-orange-900/30 text-orange-200 border-orange-700/60')
                       : (isLight ? 'bg-white text-slate-600 border-slate-200' : 'bg-gray-900 text-gray-300 border-gray-700')}`}
                   >
-                    按当前路径修改（默认）
+                    Edit by current path (default)
                   </button>
                   <button
                     type="button"
@@ -3129,16 +3129,16 @@ useEffect(() => {
                       ? (isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-900/30 text-blue-200 border-blue-700/60')
                       : (isLight ? 'bg-white text-slate-600 border-slate-200' : 'bg-gray-900 text-gray-300 border-gray-700')}`}
                   >
-                    全局修改（影响所有路径）
+                    Global edit (affects all paths)
                   </button>
                 </div>
                 <div className={`text-[11px] ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>
                   {editScope === 'path'
-                    ? (selectedPathId ? `当前将仅修改已选路径：${selectedPathId}` : '请先在 Paths 区域点击一条路径，再执行按路径修改')
-                    : '将直接修改当前节点ID，所有引用该节点的路径都会变化'}
+                    ? (selectedPathId ? `Only selected path will be modified: ${selectedPathId}` : 'Please click a path in Paths first, then apply path-based edit')
+                    : 'Current node ID will be edited directly, affecting all paths that reference this node'}
                 </div>
                 <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  <span>名称</span>
+                  <span>Name</span>
                   <input
                     type="text"
                     value={editNodeForm.name}
@@ -3147,7 +3147,7 @@ useEffect(() => {
                   />
                 </label>
                 <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  <span>类型</span>
+                  <span>Type</span>
                   <input
                     type="text"
                     value={editNodeForm.type}
@@ -3156,7 +3156,7 @@ useEffect(() => {
                   />
                 </label>
                 <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  <span>描述</span>
+                  <span>Description</span>
                   <input
                     type="text"
                     value={editNodeForm.description}
@@ -3170,7 +3170,7 @@ useEffect(() => {
                     onClick={handleEditNodeSave}
                     className={`text-xs px-2.5 py-1 rounded border ${isLight ? 'bg-white text-slate-700 border-slate-200 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-900 text-gray-200 border-gray-700 hover:text-white'}`}
                   >
-                    保存修改
+                    Save Changes
                   </button>
                 </div>
               </div>
@@ -3181,14 +3181,14 @@ useEffect(() => {
           {!selectedNode && selectedEdge && (
             <div className={`absolute bottom-4 left-4 right-4 rounded-lg p-3 max-h-32 overflow-auto ${isLight ? 'bg-white border border-slate-200' : 'bg-gray-800'}`}>
               <div className="flex items-center justify-between mb-2">
-                <span className="px-2 py-0.5 rounded text-xs text-white bg-indigo-600">关系</span>
+                <span className="px-2 py-0.5 rounded text-xs text-white bg-indigo-600">Relationship</span>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleDeleteEdge}
                     className={`text-[11px] px-2 py-0.5 rounded border ${isLight ? 'bg-white text-red-600 border-red-200 hover:bg-red-50' : 'bg-gray-900 text-red-300 border-red-900/50 hover:text-red-200'}`}
                   >
-                    删除关系
+                    Delete Relationship
                   </button>
                   <button
                     type="button"
@@ -3255,8 +3255,8 @@ useEffect(() => {
               >
                 <span className={`${isLight ? 'text-slate-700' : 'text-gray-200'} text-xs font-semibold`}>
                   {isRecordsContext && queryMode === 'exact'
-                    ? `Paths（全量${allPathEntries.length}）`
-                    : `Paths（可见${visiblePathEntries.length} / 已加载${allPathEntries.length} / 上限${nodeLimit}${Number.isFinite(totalPathCount) ? ` / 全量${totalPathCount}` : ''}）`}
+                    ? `Paths (all ${allPathEntries.length})`
+                    : `Paths (visible ${visiblePathEntries.length} / loaded ${allPathEntries.length} / limit ${nodeLimit}${Number.isFinite(totalPathCount) ? ` / all ${totalPathCount}` : ''})`}
                 </span>
                 {showPathPanel ? (
                   <ChevronDown size={14} className={`${isLight ? 'text-slate-500' : 'text-gray-400'}`} />
@@ -3273,7 +3273,7 @@ useEffect(() => {
                   }}
                   className={`text-[11px] px-2 py-1 rounded border ${isLight ? 'bg-white text-slate-600 border-slate-200 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-800 text-gray-300 border-gray-700 hover:text-white'}`}
                 >
-                  清除筛选
+                  Clear Filters
                 </button>
               )}
             </div>

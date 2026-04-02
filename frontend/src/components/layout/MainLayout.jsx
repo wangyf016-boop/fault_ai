@@ -143,11 +143,11 @@ const MainLayout = () => {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+            <main className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden relative">
                  {/* Top Background Decoration */}
                  <div className="absolute top-0 inset-x-0 h-64 bg-gradient-to-b from-slate-100/50 to-transparent pointer-events-none z-0" />
 
-                <div className="flex-1 overflow-auto px-6 pb-6 z-10 relative mt-6">
+                <div className="flex-1 min-w-0 overflow-auto px-6 pb-6 z-10 relative mt-6">
                      <div className="max-w-[1600px] mx-auto h-full">
                         <Outlet />
                      </div>

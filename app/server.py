@@ -615,20 +615,28 @@ def _rerank_records_for_flow(records: List[Dict], station_hint: str = "", top_k:
 
 def _build_flow_plan_with_llm(query: str, flowchart_records: List[Dict], flowchart_summary: str = "", station_hint: str = "") -> Dict:
     """方案B：重排 topK + LLM 直接输出 DSL + 兼容字段回填。"""
+    user_lang = _detect_user_language(query)
+    is_en = (user_lang == "english")
+
+    default_verify = "Retest passed continuously after handling" if is_en else "处理后连续复测通过"
+    default_problem = "Current issue" if is_en else "当前问题"
+    default_branch_cause = "Cause branch" if is_en else "原因分支"
+    default_branch_step = "Execute corresponding handling" if is_en else "执行对应处置"
+
     plan_default = {
         "likely_cause": "",
         "steps": [],
-        "verify": "处理后连续复测通过",
+        "verify": default_verify,
         "branch_mode": "single",
         "cause_branches": [],
         "diagram_spec": {
             "version": "dsl_v1",
-            "problem": "当前问题",
+            "problem": default_problem,
             "likely_cause": "",
             "mode": "single",
             "steps": [],
             "branches": [],
-            "verify": "处理后连续复测通过",
+            "verify": default_verify,
         },
     }
 
@@ -640,32 +648,61 @@ def _build_flow_plan_with_llm(query: str, flowchart_records: List[Dict], flowcha
 
     evidence_lines = []
     for idx, r in enumerate(source_records, 1):
-        evidence_lines.append(
-            f"[{idx}] 工位:{r.get('station','')} 问题:{r.get('problem','')} 原因:{r.get('cause','')} 措施:{r.get('action','')} 日期:{r.get('date','')} 相似度:{r.get('score_percent', r.get('score', ''))}"
-        )
+        if is_en:
+            evidence_lines.append(
+                f"[{idx}] Station:{r.get('station','')} Problem:{r.get('problem','')} Cause:{r.get('cause','')} Action:{r.get('action','')} Date:{r.get('date','')} Similarity:{r.get('score_percent', r.get('score', ''))}"
+            )
+        else:
+            evidence_lines.append(
+                f"[{idx}] 工位:{r.get('station','')} 问题:{r.get('problem','')} 原因:{r.get('cause','')} 措施:{r.get('action','')} 日期:{r.get('date','')} 相似度:{r.get('score_percent', r.get('score', ''))}"
+            )
     evidence_text = "\n".join(evidence_lines)
 
-    prompt = (
-        "根据下方故障记录，生成排查流程 DSL（JSON）。\n"
-        "只输出纯 JSON，不要解释。\n"
-        "不得编造记录中不存在的设备/动作。\n\n"
-        "JSON schema:\n"
-        "{\n"
-        "  \"problem\": \"字符串(6~20字)\",\n"
-        "  \"mode\": \"single|by_cause\",\n"
-        "  \"likely_cause\": \"字符串(6~16字)\",\n"
-        "  \"steps\": [{\"check\":\"动作短句(6~18字)\",\"action\":\"动作短句(可空)\"}],\n"
-        "  \"branches\": [{\"cause\":\"原因短句(6~16字)\",\"steps\":[\"动作短句\",\"动作短句\"]}],\n"
-        "  \"verify\": \"动作短句(6~20字)\"\n"
-        "}\n\n"
-        "规则:\n"
-        "- 优先综合 top 记录做整体结论，不要逐条复述\n"
-        "- 若原因分歧明显用 by_cause，否则 single\n"
-        "- single: steps 3~4 条；by_cause: branches 2~4 个、每分支 1~3 步\n"
-        "- 去掉编号/解释/客套词，只保留核心动作\n\n"
-        f"用户问题:\n{query}\n\n"
-        f"故障记录:\n{evidence_text}"
-    )
+    if is_en:
+        prompt = (
+            "Generate a troubleshooting flow DSL (JSON) from the records below.\n"
+            "Output pure JSON only, no explanation.\n"
+            "Do not invent devices/actions not present in records.\n"
+            "All values in the JSON must be in English.\n\n"
+            "JSON schema:\n"
+            "{\n"
+            "  \"problem\": \"string (6~20 chars)\",\n"
+            "  \"mode\": \"single|by_cause\",\n"
+            "  \"likely_cause\": \"string (6~16 chars)\",\n"
+            "  \"steps\": [{\"check\":\"action phrase (6~18 chars)\",\"action\":\"action phrase (optional)\"}],\n"
+            "  \"branches\": [{\"cause\":\"cause phrase (6~16 chars)\",\"steps\":[\"action phrase\",\"action phrase\"]}],\n"
+            "  \"verify\": \"action phrase (6~20 chars)\"\n"
+            "}\n\n"
+            "Rules:\n"
+            "- Build one integrated conclusion from top records, do not restate record by record\n"
+            "- Use by_cause only when causes diverge clearly, otherwise use single\n"
+            "- single: 3~4 steps; by_cause: 2~4 branches, each branch 1~3 steps\n"
+            "- Keep only concise executable actions\n\n"
+            f"User query:\n{query}\n\n"
+            f"Fault records:\n{evidence_text}"
+        )
+    else:
+        prompt = (
+            "根据下方故障记录，生成排查流程 DSL（JSON）。\n"
+            "只输出纯 JSON，不要解释。\n"
+            "不得编造记录中不存在的设备/动作。\n\n"
+            "JSON schema:\n"
+            "{\n"
+            "  \"problem\": \"字符串(6~20字)\",\n"
+            "  \"mode\": \"single|by_cause\",\n"
+            "  \"likely_cause\": \"字符串(6~16字)\",\n"
+            "  \"steps\": [{\"check\":\"动作短句(6~18字)\",\"action\":\"动作短句(可空)\"}],\n"
+            "  \"branches\": [{\"cause\":\"原因短句(6~16字)\",\"steps\":[\"动作短句\",\"动作短句\"]}],\n"
+            "  \"verify\": \"动作短句(6~20字)\"\n"
+            "}\n\n"
+            "规则:\n"
+            "- 优先综合 top 记录做整体结论，不要逐条复述\n"
+            "- 若原因分歧明显用 by_cause，否则 single\n"
+            "- single: steps 3~4 条；by_cause: branches 2~4 个、每分支 1~3 步\n"
+            "- 去掉编号/解释/客套词，只保留核心动作\n\n"
+            f"用户问题:\n{query}\n\n"
+            f"故障记录:\n{evidence_text}"
+        )
 
     try:
         current_llm = get_llm()
@@ -679,9 +716,9 @@ def _build_flow_plan_with_llm(query: str, flowchart_records: List[Dict], flowcha
         mode = str(dsl.get("mode", "single")).strip().lower()
         mode = mode if mode in {"single", "by_cause"} else "single"
 
-        problem = _compact_core_text(dsl.get("problem", ""), max_len=20) or _extract_problem_core_from_query(query) or "当前问题"
+        problem = _compact_core_text(dsl.get("problem", ""), max_len=20) or _extract_problem_core_from_query(query) or default_problem
         likely_cause = _compact_core_text(dsl.get("likely_cause", ""), max_len=16)
-        verify = _compact_core_text(dsl.get("verify", "处理后连续复测通过"), max_len=20) or "处理后连续复测通过"
+        verify = _compact_core_text(dsl.get("verify", default_verify), max_len=20) or default_verify
 
         # 规范 single steps
         norm_steps = []
@@ -711,8 +748,8 @@ def _build_flow_plan_with_llm(query: str, flowchart_records: List[Dict], flowcha
                 b_steps = [x for x in b_steps if x][:3]
                 if cause or b_steps:
                     norm_branches.append({
-                        "cause": cause or "原因分支",
-                        "steps": b_steps or ["执行对应处置"],
+                        "cause": cause or default_branch_cause,
+                        "steps": b_steps or [default_branch_step],
                         "confidence": 0.0,
                     })
 
@@ -745,20 +782,26 @@ def _build_flow_plan_with_llm(query: str, flowchart_records: List[Dict], flowcha
         }
     except Exception as e:
         print(f"[FlowPlan-B] LLM/解析失败，回退最小DSL: {e}")
-        fallback_problem = _extract_problem_core_from_query(query) or str((source_records[0] or {}).get("problem", "当前问题"))
+        fallback_problem = _extract_problem_core_from_query(query) or str((source_records[0] or {}).get("problem", default_problem))
         fallback = dict(plan_default)
         fallback["diagram_spec"] = {
             "version": "dsl_v1",
-            "problem": _compact_core_text(fallback_problem, max_len=20) or "当前问题",
+            "problem": _compact_core_text(fallback_problem, max_len=20) or default_problem,
             "likely_cause": "",
             "mode": "single",
-            "steps": [
-                {"check": "确认故障复现条件", "action": ""},
-                {"check": "检查关键部件状态", "action": "执行对应处置"},
-                {"check": "复位并连续复测", "action": ""},
-            ],
+            "steps": (
+                [
+                    {"check": "Confirm fault reproduction conditions", "action": ""},
+                    {"check": "Check key component status", "action": "Execute corresponding handling"},
+                    {"check": "Reset and run continuous retest", "action": ""},
+                ] if is_en else [
+                    {"check": "确认故障复现条件", "action": ""},
+                    {"check": "检查关键部件状态", "action": "执行对应处置"},
+                    {"check": "复位并连续复测", "action": ""},
+                ]
+            ),
             "branches": [],
-            "verify": "处理后连续复测通过",
+            "verify": default_verify,
         }
         fallback["steps"] = [{"check": s["check"], "yes_action": s["action"], "no_action": ""} for s in fallback["diagram_spec"]["steps"]]
         return fallback

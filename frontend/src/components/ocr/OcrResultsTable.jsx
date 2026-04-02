@@ -113,7 +113,7 @@ const OcrResultsTable = ({ results, onDelete, compact = false }) => {
                                 <>
                                     {/* 状态 */}
                                     <td className="py-4 px-6">
-                                        {result.status === '成功' || result.status === 'SUCCESS' ? (
+                                        {result.status === 'SUCCESS' || result.status === '成功' ? (
                                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-bold border border-emerald-100">
                                                 <CheckCircle size={12} className="fill-current" />
                                                 Success

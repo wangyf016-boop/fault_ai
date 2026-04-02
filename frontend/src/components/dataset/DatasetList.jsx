@@ -82,14 +82,14 @@ const DatasetList = ({ datasets, onDatasetSelect, onDatasetDelete, activeCollect
                                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-brand-orange-600"
                                         >
                                             <Eye size={16} />
-                                            预览
+                                            Preview
                                         </button>
                                         <button
                                             onClick={(event) => handleDeleteClick(event, dataset)}
                                             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-red-50"
                                         >
                                             <Trash2 size={16} />
-                                            删除
+                                            Delete
                                         </button>
                                     </div>
                                 )}
@@ -118,7 +118,7 @@ const DatasetList = ({ datasets, onDatasetSelect, onDatasetDelete, activeCollect
                             className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100"
                             onClick={e => e.stopPropagation()}
                         >
-                            <span className="text-xs text-slate-400">参与搜索</span>
+                            <span className="text-xs text-slate-400">Included in search</span>
                             <button
                                 type="button"
                                 onClick={() => onToggleActive?.(dataset.name)}
@@ -127,7 +127,7 @@ const DatasetList = ({ datasets, onDatasetSelect, onDatasetDelete, activeCollect
                                         ? 'bg-brand-orange-500'
                                         : 'bg-slate-200'
                                 }`}
-                                title={activeCollections.has(dataset.name) ? '点击停用' : '点击启用'}
+                                title={activeCollections.has(dataset.name) ? 'Click to disable' : 'Click to enable'}
                             >
                                 <span
                                     className={`inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ${
@@ -150,27 +150,27 @@ const DatasetList = ({ datasets, onDatasetSelect, onDatasetDelete, activeCollect
                                 <Trash2 size={24} className="text-red-500" />
                             </div>
                             <div>
-                                <h3 className="text-lg font-bold text-slate-800">确认删除</h3>
-                                <p className="text-sm text-slate-500">此操作不可撤销</p>
+                                <h3 className="text-lg font-bold text-slate-800">Confirm Deletion</h3>
+                                <p className="text-sm text-slate-500">This action cannot be undone</p>
                             </div>
                         </div>
                         <p className="text-slate-600 mb-6">
-                            确定要删除集合 <span className="font-semibold text-slate-800">"{deleteConfirm.name}"</span> 吗？
+                            Are you sure you want to delete collection <span className="font-semibold text-slate-800">"{deleteConfirm.name}"</span>?
                             <br />
-                            <span className="text-sm text-slate-500">包含 {deleteConfirm.chunkCount} 条数据将被永久删除。</span>
+                            <span className="text-sm text-slate-500">{deleteConfirm.chunkCount} records will be permanently deleted.</span>
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button
                                 onClick={() => setDeleteConfirm(null)}
                                 className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-colors"
                             >
-                                取消
+                                Cancel
                             </button>
                             <button
                                 onClick={confirmDelete}
                                 className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium transition-colors"
                             >
-                                确认删除
+                                Confirm Delete
                             </button>
                         </div>
                     </div>
