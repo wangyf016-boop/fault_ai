@@ -3,7 +3,13 @@ import { Plus, MessageSquare, Search, Trash2, ChevronLeft, ChevronRight } from '
 
 const ChatSidebar = ({ sessions, activeSessionId, onSelectSession, onNewSession, onDeleteSession, canStartNewSession = true }) => {
     const [openMenuId, setOpenMenuId] = useState(null);
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(() => {
+        try {
+            return localStorage.getItem('chatSidebarCollapsed') === '1';
+        } catch {
+            return false;
+        }
+    });
     const menuRef = useRef(null);
 
     useEffect(() => {
@@ -15,6 +21,14 @@ const ChatSidebar = ({ sessions, activeSessionId, onSelectSession, onNewSession,
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('chatSidebarCollapsed', isCollapsed ? '1' : '0');
+        } catch {
+            // ignore storage errors
+        }
+    }, [isCollapsed]);
 
     const groupedSessions = useMemo(() => {
         return sessions.reduce((acc, session) => {
@@ -30,7 +44,7 @@ const ChatSidebar = ({ sessions, activeSessionId, onSelectSession, onNewSession,
     const groupEntries = Object.entries(groupedSessions);
 
     return (
-        <div className={`${isCollapsed ? 'w-0 min-w-0 border-r-0' : 'w-72 border-r border-slate-200'} h-full shrink-0 flex flex-col bg-white transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] relative overflow-visible`}>
+        <div className={`${isCollapsed ? 'w-20 min-w-[80px] border-r border-slate-200' : 'w-72 border-r border-slate-200'} h-full shrink-0 flex flex-col bg-white transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] relative overflow-visible`}>
             {/* Toggle Button */}
             <button 
                 onClick={() => setIsCollapsed(!isCollapsed)}
@@ -39,7 +53,7 @@ const ChatSidebar = ({ sessions, activeSessionId, onSelectSession, onNewSession,
                 {isCollapsed ? <ChevronRight size={14} strokeWidth={3} /> : <ChevronLeft size={14} strokeWidth={3} />}
             </button>
 
-            {!isCollapsed && (
+            {!isCollapsed ? (
                 <>
                 {/* Header with gradient accent */}
                 <div className="p-4 bg-gradient-to-b from-brand-orange-50 to-white">
@@ -131,6 +145,41 @@ const ChatSidebar = ({ sessions, activeSessionId, onSelectSession, onNewSession,
                 ))}
             </div>
             </>
+            ) : (
+                <div className="h-full flex flex-col items-center pt-16 gap-3 px-3">
+                    <div className="w-full rounded-2xl border border-slate-200 bg-slate-50/80 p-1.5 flex items-center justify-center">
+                    <button
+                        onClick={onNewSession}
+                        disabled={!canStartNewSession}
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${canStartNewSession
+                            ? 'bg-gradient-to-r from-brand-orange-500 to-brand-purple-500 text-white shadow-md hover:shadow-lg'
+                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        }`}
+                        title="New Chat"
+                    >
+                        <Plus size={18} />
+                    </button>
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400">
+                        <MessageSquare size={18} />
+                    </div>
+                    <div className="mt-1 w-full flex-1 overflow-y-auto custom-scrollbar space-y-2 pb-3">
+                        {sessions.slice(0, 8).map((session) => (
+                            <button
+                                key={session.id}
+                                onClick={() => onSelectSession(session.id)}
+                                className={`w-10 h-10 rounded-xl mx-auto flex items-center justify-center text-xs font-semibold transition-all ${
+                                    activeSessionId === session.id
+                                        ? 'bg-brand-orange-100 text-brand-orange-600 border border-brand-orange-200'
+                                        : 'bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100'
+                                }`}
+                                title={session.title}
+                            >
+                                {(session.title || 'C').slice(0, 1).toUpperCase()}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -244,9 +244,14 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
     const [followupLoading, setFollowupLoading] = useState(false);
     const [followupHistory, setFollowupHistory] = useState([]);
     const [assistantWidth, setAssistantWidth] = useState(null);
+    const [statusDotCount, setStatusDotCount] = useState(0);
+    const [showNonDiagTable, setShowNonDiagTable] = useState(!message?.isStreaming);
+    const [showNonDiagMermaid, setShowNonDiagMermaid] = useState(!message?.isStreaming);
     const rowRef = useRef(null);
     const contentRef = useRef(null);
     const resizeStateRef = useRef(null);
+    const nonDiagTableTimerRef = useRef(null);
+    const nonDiagMermaidTimerRef = useRef(null);
     const followupHydratedRef = useRef(false);
     const followupHistoryRef = useRef([]);
     
@@ -268,6 +273,65 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
         followupHistory.length > 0 ||
         !!followupInput.trim()
     );
+
+    useEffect(() => {
+        if (!isStreaming || isUser) {
+            setStatusDotCount(0);
+            return;
+        }
+        const timer = window.setInterval(() => {
+            setStatusDotCount((prev) => (prev + 1) % 4);
+        }, 350);
+        return () => window.clearInterval(timer);
+    }, [isStreaming, isUser, message?.id]);
+
+    useEffect(() => {
+        return () => {
+            if (nonDiagTableTimerRef.current) clearTimeout(nonDiagTableTimerRef.current);
+            if (nonDiagMermaidTimerRef.current) clearTimeout(nonDiagMermaidTimerRef.current);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (hasDiagnosisData || !hasQdrantRecords) {
+            if (!isStreaming) {
+                setShowNonDiagTable(true);
+                setShowNonDiagMermaid(true);
+            }
+            return;
+        }
+
+        if (!isStreaming) {
+            setShowNonDiagTable(true);
+            setShowNonDiagMermaid(true);
+            return;
+        }
+
+        if (nonDiagTableTimerRef.current) clearTimeout(nonDiagTableTimerRef.current);
+        setShowNonDiagTable(true);
+    }, [hasDiagnosisData, hasQdrantRecords, isStreaming, message?.id]);
+
+    useEffect(() => {
+        if (hasDiagnosisData || !hasQdrantRecords) {
+            if (!isStreaming) setShowNonDiagMermaid(true);
+            return;
+        }
+
+        if (!isStreaming) {
+            setShowNonDiagMermaid(true);
+            return;
+        }
+
+        if (!message?.flowPlan) {
+            setShowNonDiagMermaid(false);
+            return;
+        }
+
+        if (nonDiagMermaidTimerRef.current) clearTimeout(nonDiagMermaidTimerRef.current);
+        nonDiagMermaidTimerRef.current = setTimeout(() => {
+            setShowNonDiagMermaid(true);
+        }, 220);
+    }, [hasDiagnosisData, hasQdrantRecords, isStreaming, message?.flowPlan, message?.id]);
 
     const persistFollowupHistoryDirect = (history, reason = 'direct') => {
         const nextHistory = Array.isArray(history) ? history.slice(-20) : [];
@@ -324,7 +388,37 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
     const diagnosisLeadContent = shouldUseLeadContent
         ? (displayContent ? String(displayContent).split('\n').find((line) => line.trim()) || '' : '')
         : '';
-    
+    const streamingProgressText = (() => {
+        if (!isStreaming || isUser) return '';
+        if (message?.progressStatus) return message.progressStatus;
+
+        if (hasDiagnosisData) {
+            const hasKg = !!message?.diagnosisData?.kg;
+            const hasTable = !!message?.diagnosisData?.records;
+            const hasFlow = !!message?.diagnosisData?.flowchart;
+            if (!hasKg) return '正在生成图谱...';
+            if (!hasTable) return '正在检索表格...';
+            if (!hasFlow) return '正在生成流程图...';
+            return '正在整理结果...';
+        }
+
+        if (hasQdrantRecords) {
+            if (!showNonDiagTable) return '正在检索表格...';
+            if (!showNonDiagMermaid) return '正在生成流程图...';
+            return '正在整理结果...';
+        }
+
+        return '正在分析问题...';
+    })();
+    const animatedStreamingProgressText = (() => {
+        if (!streamingProgressText) return '';
+        const base = String(streamingProgressText).replace(/[.。…]+$/, '');
+        return `${base}${'.'.repeat(statusDotCount)}`;
+    })();
+    const withAnimatedDots = (text) => {
+        const base = String(text || '').replace(/[.。…]+$/, '');
+        return `${base}${'.'.repeat(statusDotCount)}`;
+    };
     // 检测是否请求知识图谱
     const userContent = message.role === 'user' ? message.content : '';
     const showGraph = message.showGraph || false;
@@ -652,6 +746,13 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                         ? 'bg-white border border-brand-orange-300 text-slate-800 rounded-tr-sm'
                         : 'bg-white border border-slate-200 rounded-tl-sm'
                     }`}>
+                    {!isUser && isStreaming && !!streamingProgressText && (
+                        <div className="mb-3 text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                            <span>{animatedStreamingProgressText}</span>
+                            <span className="inline-block w-2 h-4 bg-slate-400/70 animate-pulse ml-1 align-middle" />
+                        </div>
+                    )}
+
                     {/* 文本内容 */}
                     {displayContent && !shouldUseLeadContent && (
                         <div className="prose prose-sm dark:prose-invert max-w-none">
@@ -661,14 +762,59 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                             )}
                         </div>
                     )}
-                    {shouldUseLeadContent && diagnosisLeadContent && (
+                    {shouldUseLeadContent && (diagnosisLeadContent || streamingProgressText) && (
                         <div className="text-sm text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                            {diagnosisLeadContent}
+                            {isStreaming ? (diagnosisLeadContent || '') : diagnosisLeadContent}
                         </div>
                     )}
-                    {/* 流式加载中且无内容 */}
-                    {!displayContent && isStreaming && !hasQdrantRecords && (
-                        <span className="text-muted-foreground animate-pulse">思考中...</span>
+                    {/* 流式加载中：数据未到达时立即显示三模块骨架（从进度起始阶段就显示） */}
+                    {isStreaming && !hasQdrantRecords && !hasDiagnosisData && (
+                        <div className="space-y-3 mt-3">
+                            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                                <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
+                                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <Table size={15} className="text-slate-400" />
+                                        Neo4j图谱
+                                    </span>
+                                    <span className="text-xs text-slate-400">{withAnimatedDots('正在检索图谱')}</span>
+                                </div>
+                                <div className="px-4 py-4">
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse mb-2 w-5/6" />
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse w-2/3" />
+                                </div>
+                            </div>
+
+                            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                                <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
+                                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <Table size={15} className="text-slate-400" />
+                                        Qdrant表格
+                                    </span>
+                                    <span className="text-xs text-slate-400">{withAnimatedDots('正在检索表格')}</span>
+                                </div>
+                                <div className="px-4 py-4">
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse mb-2 w-5/6" />
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse w-2/3" />
+                                </div>
+                            </div>
+
+                            <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                                <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
+                                    <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                        <Table size={15} className="text-slate-400" />
+                                        Mermaid流程图
+                                    </span>
+                                    <span className="text-xs text-slate-400">{withAnimatedDots('等待表格完成后生成')}</span>
+                                </div>
+                                <div className="px-4 py-4">
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse mb-2 w-5/6" />
+                                    <div className="h-2 rounded bg-slate-100 animate-pulse w-2/3" />
+                                </div>
+                            </div>
+                        </div>
                     )}
                     {/* 三段式诊断视图 */}
                     {hasDiagnosisData && (
@@ -677,11 +823,12 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                                 diagnosisData={message.diagnosisData}
                                 answerText={displayContent}
                                 userQuery={userQuery}
+                                isStreaming={isStreaming}
                             />
                         </div>
                     )}
-                    {/* 非诊断模式：也固定为 图谱 -> 表格 -> 流程图 */}
-                    {hasQdrantRecords && !hasDiagnosisData && !isStreaming && (
+                    {/* 非诊断模式：也固定为 图谱 -> 表格 -> 流程图（支持流式逐步出现） */}
+                    {hasQdrantRecords && !hasDiagnosisData && (
                         <div className={`space-y-4 mt-3 ${RESULTS_NARROW_CLASS}`}>
                             <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white p-3">
                                 <Neo4jGraph
@@ -697,15 +844,49 @@ const MessageBubble = ({ message, userQuery = '', onRegenerate, conversationId =
                                 />
                             </div>
 
-                            <RecordsTable records={message.qdrantRecords} title="检索记录" />
+                            {showNonDiagTable ? (
+                                <RecordsTable records={message.qdrantRecords} title="检索记录" />
+                            ) : (
+                                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                                    <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
+                                        <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                            <Table size={15} className="text-slate-400" />
+                                            Qdrant表格
+                                        </span>
+                                        <span className="text-xs text-slate-400">{withAnimatedDots('正在检索表格')}</span>
+                                    </div>
+                                    <div className="px-4 py-4">
+                                        <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
+                                        <div className="h-2 rounded bg-slate-100 animate-pulse mb-2 w-5/6" />
+                                        <div className="h-2 rounded bg-slate-100 animate-pulse w-2/3" />
+                                    </div>
+                                </div>
+                            )}
 
-                            <MermaidDiagram
-                                records={message.qdrantRecords}
-                                answerText={displayContent || ''}
-                                flowPlan={message.flowPlan}
-                                userQuery={userQuery}
-                                inline={true}
-                            />
+                            {showNonDiagMermaid ? (
+                                <MermaidDiagram
+                                    records={message.qdrantRecords}
+                                    answerText={displayContent || ''}
+                                    flowPlan={message.flowPlan}
+                                    userQuery={userQuery}
+                                    inline={true}
+                                />
+                            ) : (
+                                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                                    <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
+                                        <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                                            <Table size={15} className="text-slate-400" />
+                                            Mermaid流程图
+                                        </span>
+                                        <span className="text-xs text-slate-400">{withAnimatedDots('正在生成流程图')}</span>
+                                    </div>
+                                    <div className="px-4 py-4">
+                                        <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
+                                        <div className="h-2 rounded bg-slate-100 animate-pulse mb-2 w-5/6" />
+                                        <div className="h-2 rounded bg-slate-100 animate-pulse w-2/3" />
+                                    </div>
+                                </div>
+                            )}
 
                             {showGraph && (
                                 <KnowledgeGraph

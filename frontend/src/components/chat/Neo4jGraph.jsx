@@ -32,6 +32,55 @@ const TYPE_LEVELS = {
   Solution: 6,
 };
 
+const DEFAULT_RELATION_TYPE = 'RELATED_TO';
+const RELATION_TYPE_BY_NODE_PAIR = {
+  'Area->Equipment': 'INCLUDE',
+  'Equipment->Component': 'HAS_PART',
+  'Component->Problem': 'HAS_FAULT',
+  'Problem->Cause': 'CAUSED_BY',
+  'Cause->Solution': 'SOLVED_BY',
+};
+
+function extractNodeTypeValue(node) {
+  if (!node || typeof node !== 'object') return '';
+  const rawData = node.rawData && typeof node.rawData === 'object' ? node.rawData : {};
+  return String(
+    node.nodeType
+      || node.type
+      || rawData.type
+      || rawData.labels?.[0]
+      || node.labels?.[0]
+      || ''
+  ).trim();
+}
+
+function suggestRelationTypeByNodes(fromNode, toNodeType) {
+  const fromType = extractNodeTypeValue(fromNode);
+  const targetType = String(toNodeType || '').trim();
+  if (!fromType || !targetType) return DEFAULT_RELATION_TYPE;
+  return RELATION_TYPE_BY_NODE_PAIR[`${fromType}->${targetType}`] || DEFAULT_RELATION_TYPE;
+}
+
+async function parseApiError(response, fallbackMessage) {
+  const fallback = `${fallbackMessage} (HTTP ${response.status})`;
+  try {
+    const data = await response.clone().json();
+    if (data && typeof data === 'object') {
+      const detail = String(data.detail || data.message || '').trim();
+      if (detail) return `${fallbackMessage}: ${detail}`;
+    }
+  } catch {
+    // no-op, fallback to text parse
+  }
+  try {
+    const text = String(await response.text()).trim();
+    if (text) return `${fallbackMessage}: ${text}`;
+  } catch {
+    // no-op
+  }
+  return fallback;
+}
+
 const GRAPH_REQUEST_TIMEOUT = 60000;
 
 const EMBEDDED_GRAPH_CACHE = new Map();
@@ -624,6 +673,7 @@ export default function Neo4jGraph({
   lightTheme = false,
   showPaths = false,
   embedded = false,
+  disableEmbeddedCache = false,
   defaultLimit = 20,
   limitOptions = [20, 50, 100, 200],
   defaultQueryMode = 'exact',
@@ -655,6 +705,13 @@ export default function Neo4jGraph({
     : fallbackLimit;
   const [nodeLimit, setNodeLimit] = useState(initialLimit);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMainSidebarCollapsed, setIsMainSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('mainLayoutSidebarCollapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [expandedNodes, setExpandedNodes] = useState(new Set()); // 已展开的节点
@@ -680,7 +737,13 @@ export default function Neo4jGraph({
   const [editNodeForm, setEditNodeForm] = useState({ name: '', type: '', description: '' });
   const [editScope, setEditScope] = useState('path'); // path | global
   const [isAddingNode, setIsAddingNode] = useState(false);
-  const [addNodeForm, setAddNodeForm] = useState({ name: '', type: 'Component', description: '', relationType: 'RELATED_TO' });
+  const [addNodeForm, setAddNodeForm] = useState({
+    name: '',
+    type: 'Component',
+    description: '',
+    relationType: DEFAULT_RELATION_TYPE,
+    fromNodeId: '',
+  });
   const [showMutationPanel, setShowMutationPanel] = useState(false);
   const [mutationLogs, setMutationLogs] = useState([]);
   const [loadingMutations, setLoadingMutations] = useState(false);
@@ -719,16 +782,25 @@ export default function Neo4jGraph({
   useEffect(() => {
     setMode(useRecordsRoute ? 'records' : 'keyword');
   }, [useRecordsRoute]);
+
+  useEffect(() => {
+    const handleSidebarChange = (event) => {
+      const collapsed = event?.detail?.collapsed;
+      if (typeof collapsed === 'boolean') {
+        setIsMainSidebarCollapsed(collapsed);
+      }
+    };
+
+    window.addEventListener('layout:main-sidebar-change', handleSidebarChange);
+    return () => window.removeEventListener('layout:main-sidebar-change', handleSidebarChange);
+  }, []);
   
   useEffect(() => {
     childrenMapRef.current = childrenMap;
   }, [childrenMap]);
 
   useEffect(() => {
-    if (!loading) {
-      setLoadingProgress(100);
-      return;
-    }
+    if (!loading) return;
 
     const timer = window.setInterval(() => {
       setLoadingProgress((prev) => (prev >= 90 ? prev : prev + (prev < 50 ? 8 : 3)));
@@ -877,6 +949,14 @@ export default function Neo4jGraph({
       options,
     );
 
+    // 防止页面滚动与图谱滚轮缩放同时触发导致视图抖动/乱动。
+    // 仅阻止浏览器默认滚动，不阻止 vis-network 在同元素上的缩放监听。
+    const wheelGuard = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    containerRef.current.addEventListener('wheel', wheelGuard, { passive: false });
+
     // 用户开始拖拽节点时：立即停止物理，防止节点乱飘
     networkRef.current.on('dragStart', (params) => {
       userInteractedRef.current = true;
@@ -948,6 +1028,7 @@ export default function Neo4jGraph({
 
     return () => {
       window.clearTimeout(stabilizeTimerRef.current);
+      containerRef.current?.removeEventListener('wheel', wheelGuard);
       if (networkRef.current) {
         networkRef.current.destroy();
         networkRef.current = null;
@@ -960,15 +1041,37 @@ export default function Neo4jGraph({
     if (!containerRef.current || !networkRef.current) return;
 
     let rafId = null;
+    let lastWidth = 0;
+    let lastHeight = 0;
+
+    const getNodeCount = () => {
+      const ids = nodesDataSet.current?.getIds?.();
+      return Array.isArray(ids) ? ids.length : 0;
+    };
+
     const syncViewport = () => {
       const network = networkRef.current;
-      if (!network) return;
+      const container = containerRef.current;
+      if (!network || !container) return;
+
+      const { width, height } = container.getBoundingClientRect();
+      const widthDiff = Math.abs(width - lastWidth);
+      const heightDiff = Math.abs(height - lastHeight);
+      const hasLargeResize = widthDiff > 40 || heightDiff > 40;
+
       const scale = network.getScale();
       const position = network.getViewPosition();
       network.redraw();
-      if (position && Number.isFinite(scale)) {
+
+      if (hasLargeResize && getNodeCount() > 0) {
+        network.fit({ animation: { duration: 220, easingFunction: 'easeInOutQuad' } });
+        network.setOptions({ physics: { enabled: false } });
+      } else if (position && Number.isFinite(scale)) {
         network.moveTo({ position, scale, animation: false });
       }
+
+      lastWidth = width;
+      lastHeight = height;
     };
 
     const scheduleSync = () => {
@@ -979,6 +1082,7 @@ export default function Neo4jGraph({
     const observer = new ResizeObserver(scheduleSync);
     observer.observe(containerRef.current);
     window.addEventListener('resize', scheduleSync);
+    scheduleSync();
 
     return () => {
       if (rafId) window.cancelAnimationFrame(rafId);
@@ -1123,7 +1227,7 @@ export default function Neo4jGraph({
       return;
     }
     const requestKey = JSON.stringify({ mode: 'keyword', kw: (kw || '').trim(), limit, slots: slots || {} });
-    if (embedded) {
+    if (embedded && !disableEmbeddedCache) {
       const cached = getEmbeddedGraphCache(requestKey);
       if (cached) {
         if (cached.executed_cypher) setExecutedCypher(cached.executed_cypher);
@@ -1172,7 +1276,7 @@ export default function Neo4jGraph({
       const data = await res.json();
       if (!isLatestGraphRequest(reqSeq)) return;
 
-      if (embedded) {
+      if (embedded && !disableEmbeddedCache) {
         setEmbeddedGraphCache(requestKey, data);
       }
 
@@ -1192,7 +1296,7 @@ export default function Neo4jGraph({
         setLoading(false);
       }
     }
-  }, [beginGraphRequest, clearGraph, fetchWithTimeout, isLatestGraphRequest, structuredFilters, embedded]);
+  }, [beginGraphRequest, clearGraph, fetchWithTimeout, isLatestGraphRequest, structuredFilters, embedded, disableEmbeddedCache]);
 
   // 加载图数据（Mode A: Qdrant 记录反查 Neo4j 六节点链路）
   const loadGraphFromRecords = useCallback(async (recs, limit) => {
@@ -1209,7 +1313,7 @@ export default function Neo4jGraph({
       question: requestQuestion,
       records: recordsToSend,
     });
-    if (embedded) {
+    if (embedded && !disableEmbeddedCache) {
       const cached = getEmbeddedGraphCache(requestKey);
       if (cached) {
         if (cached.executed_cypher) setExecutedCypher(cached.executed_cypher);
@@ -1251,7 +1355,7 @@ export default function Neo4jGraph({
       const data = await res.json();
       if (!isLatestGraphRequest(reqSeq)) return;
 
-      if (embedded) {
+      if (embedded && !disableEmbeddedCache) {
         setEmbeddedGraphCache(requestKey, data);
       }
 
@@ -1279,7 +1383,7 @@ export default function Neo4jGraph({
         setLoading(false);
       }
     }
-  }, [beginGraphRequest, clearGraph, fetchWithTimeout, isLatestGraphRequest, embedded]);
+  }, [beginGraphRequest, clearGraph, fetchWithTimeout, isLatestGraphRequest, embedded, disableEmbeddedCache]);
 
   // 将后端返回的数据渲染到 vis-network
   const renderGraphData = useCallback((data) => {
@@ -1466,50 +1570,51 @@ export default function Neo4jGraph({
     return { localOnly: false };
   }, [fetchWithTimeout]);
 
-  const persistNodeCreate = useCallback(async (payload, operationGroupId = '', operationType = '') => {
+    const persistNodeCreate = useCallback(async (payload, operationGroupId = '', operationType = '') => {
     const headers = { 'Content-Type': 'application/json' };
     if (operationGroupId) headers['X-Operation-Group-Id'] = operationGroupId;
     if (operationType) headers['X-Operation-Type'] = operationType;
-    
+
     const res = await fetchWithTimeout(buildApiUrl('/graph/node'), {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
     });
 
-    if (res.status === 404 || res.status === 405) {
-      return { localOnly: true };
-    }
     if (!res.ok) {
-      throw new Error(`新增节点失败: ${res.status}`);
+      throw new Error(await parseApiError(res, '创建节点失败'));
     }
-    const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => null);
+    const nodeId = data?.id ? String(data.id) : '';
+    if (!nodeId) {
+      throw new Error(`创建节点失败 (HTTP ${res.status}): missing node id`);
+    }
     return {
-      localOnly: false,
-      nodeId: data?.id ? String(data.id) : null,
+      nodeId,
       deduplicated: Boolean(data?.deduplicated),
     };
   }, [fetchWithTimeout]);
 
-  const persistEdgeCreate = useCallback(async (payload, operationGroupId = '', operationType = '') => {
+    const persistEdgeCreate = useCallback(async (payload, operationGroupId = '', operationType = '') => {
     const headers = { 'Content-Type': 'application/json' };
     if (operationGroupId) headers['X-Operation-Group-Id'] = operationGroupId;
     if (operationType) headers['X-Operation-Type'] = operationType;
-    
+
     const res = await fetchWithTimeout(buildApiUrl('/graph/edge'), {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
     });
 
-    if (res.status === 404 || res.status === 405) {
-      return { localOnly: true };
-    }
     if (!res.ok) {
-      throw new Error(`新增关系失败: ${res.status}`);
+      throw new Error(await parseApiError(res, '创建关系失败'));
     }
-    const data = await res.json().catch(() => ({}));
-    return { localOnly: false, edgeId: data?.id ? String(data.id) : null };
+    const data = await res.json().catch(() => null);
+    const edgeId = data?.id ? String(data.id) : '';
+    if (!edgeId) {
+      throw new Error(`创建关系失败 (HTTP ${res.status}): missing edge id`);
+    }
+    return { edgeId };
   }, [fetchWithTimeout]);
 
   const persistEdgeDelete = useCallback(async (edgeId, operationGroupId = '', operationType = '') => {
@@ -1531,15 +1636,102 @@ export default function Neo4jGraph({
     return { localOnly: false };
   }, [fetchWithTimeout]);
 
-  const handleCreateNode = useCallback(async () => {
+    const handleCreateNode = useCallback(async () => {
     const name = String(addNodeForm.name || '').trim();
     const type = String(addNodeForm.type || 'Component').trim() || 'Component';
     const description = String(addNodeForm.description || '').trim();
-    const relationType = String(addNodeForm.relationType || 'RELATED_TO').trim() || 'RELATED_TO';
-    const fromNodeId = selectedNode ? String(selectedNode.id) : null;
+    const relationType = String(addNodeForm.relationType || DEFAULT_RELATION_TYPE).trim() || DEFAULT_RELATION_TYPE;
+    const lockedFromNodeId = String(addNodeForm.fromNodeId || '').trim();
+    const lockedSourceNode = lockedFromNodeId ? nodesDataSet.current?.get(lockedFromNodeId) : null;
+    const sourceNode = lockedSourceNode
+      || selectedNode
+      || (selectedNodeFilterId ? nodesDataSet.current?.get(String(selectedNodeFilterId)) : null);
+    const fromNodeId = sourceNode ? String(sourceNode.id) : (lockedFromNodeId || '');
 
     if (!name) {
-      setMutationNotice({ type: 'error', text: '新增节点名称不能为空' });
+      setMutationNotice({ type: 'error', text: 'Node name is required.' });
+      return;
+    }
+
+    if (!fromNodeId) {
+      setMutationNotice({ type: 'error', text: 'Please select a source node first.' });
+      return;
+    }
+
+    const operationGroupId = `op-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const operationType = 'create_node_with_edge';
+    const normalizedTargetName = normalizeNodeName(name);
+    const reusedNode = allGraphNodes.find((node) => {
+      const nodeType = extractNodeTypeValue(node);
+      const nodeRaw = node?.rawData && typeof node.rawData === 'object' ? node.rawData : node;
+      const nodeName = normalizeNodeName(extractDisplayName(nodeRaw));
+      return nodeType === type && nodeName === normalizedTargetName;
+    });
+
+    if (reusedNode) {
+      const reusedNodeId = String(reusedNode.id || '').trim();
+      if (!reusedNodeId) {
+        setMutationNotice({ type: 'error', text: 'Existing node found but id is missing.' });
+        return;
+      }
+      if (reusedNodeId === fromNodeId) {
+        setMutationNotice({ type: 'error', text: 'Source and target cannot be the same node.' });
+        return;
+      }
+
+      const existingEdge = allGraphEdges.find((edge) => (
+        String(edge.from) === fromNodeId
+        && String(edge.to) === reusedNodeId
+        && String(edge.label || edge.type || edge.rawData?.type || '').trim() === relationType
+      ));
+      const selectedExistingNode = nodesDataSet.current?.get(reusedNodeId) || reusedNode;
+      setSelectedNode(selectedExistingNode);
+      setSelectedNodeFilterId(null);
+      setSelectedPathId(null);
+      setIsAddingNode(false);
+
+      if (existingEdge) {
+        setMutationNotice({ type: 'info', text: 'Node already exists and the edge already exists.' });
+        return;
+      }
+
+      const tempEdgeId = `tmp-edge-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const optimisticEdge = {
+        id: tempEdgeId,
+        from: fromNodeId,
+        to: reusedNodeId,
+        label: relationType,
+      };
+      try {
+        edgesDataSet.current?.add(optimisticEdge);
+      } catch (e) {
+        setMutationNotice({ type: 'error', text: e?.message || '前端关系渲染失败，请重试' });
+        return;
+      }
+      setAllGraphEdges((prev) => [...prev, optimisticEdge]);
+      setMutationNotice({ type: 'info', text: 'Node exists, creating edge now...' });
+
+      try {
+        const edgeResult = await persistEdgeCreate(
+          { from_id: fromNodeId, to_id: reusedNodeId, type: relationType },
+          operationGroupId,
+          'link_existing_node',
+        );
+        const persistedEdgeId = String(edgeResult?.edgeId || '').trim();
+        if (!persistedEdgeId) {
+          throw new Error('Create edge failed: missing edge id.');
+        }
+        edgesDataSet.current?.remove(tempEdgeId);
+        edgesDataSet.current?.add({ ...optimisticEdge, id: persistedEdgeId });
+        setAllGraphEdges((prev) => prev.map((edge) => (
+          String(edge.id) === tempEdgeId ? { ...edge, id: persistedEdgeId } : edge
+        )));
+        setMutationNotice({ type: 'success', text: 'Node reused and edge created successfully.' });
+      } catch (err) {
+        edgesDataSet.current?.remove(tempEdgeId);
+        setAllGraphEdges((prev) => prev.filter((edge) => String(edge.id) !== tempEdgeId));
+        setMutationNotice({ type: 'error', text: err?.message || 'Create edge failed.' });
+      }
       return;
     }
 
@@ -1552,6 +1744,7 @@ export default function Neo4jGraph({
       title: `[${type}]\n${name}`,
       color: colors,
       nodeType: type,
+      level: TYPE_LEVELS[type] || 99,
       x: center.x,
       y: center.y,
       rawData: {
@@ -1563,93 +1756,147 @@ export default function Neo4jGraph({
       },
     };
 
-    const newEdge = fromNodeId ? {
-      id: `${fromNodeId}-${relationType}-${tempNodeId}`,
+    const optimisticEdgeId = `${fromNodeId}-${relationType}-${tempNodeId}`;
+    const newEdge = {
+      id: optimisticEdgeId,
       from: fromNodeId,
       to: tempNodeId,
       label: relationType,
-    } : null;
+    };
 
-    nodesDataSet.current?.add(newNode);
-    if (newEdge) edgesDataSet.current?.add(newEdge);
+    try {
+      nodesDataSet.current?.add(newNode);
+      edgesDataSet.current?.add(newEdge);
+    } catch (e) {
+      setMutationNotice({ type: 'error', text: e?.message || '前端节点渲染失败，请重试' });
+      return;
+    }
     setAllGraphNodes((prev) => [...prev, newNode]);
-    if (newEdge) setAllGraphEdges((prev) => [...prev, newEdge]);
+    setAllGraphEdges((prev) => [...prev, newEdge]);
     setSelectedNode(newNode);
     setSelectedNodeFilterId(null);
     setSelectedPathId(null);
     setIsAddingNode(false);
-    setMutationNotice({ type: 'info', text: '正在新增节点...' });
+    setMutationNotice({ type: 'info', text: 'Creating node and edge...' });
+
+    let finalNodeId = tempNodeId;
+    let persistedEdgeId = '';
+    let createdBackendNodeId = '';
+    let shouldRollbackBackendNode = false;
 
     try {
-      const createResult = await persistNodeCreate({ type, name, description });
-      let finalNodeId = tempNodeId;
-      const deduplicated = Boolean(createResult?.deduplicated);
+      const createResult = await persistNodeCreate(
+        { type, name, description },
+        operationGroupId,
+        operationType,
+      );
+      finalNodeId = String(createResult?.nodeId || '').trim();
+      if (!finalNodeId) {
+        throw new Error('Create node failed: missing node id.');
+      }
+      createdBackendNodeId = finalNodeId;
+      shouldRollbackBackendNode = !createResult?.deduplicated;
 
-      if (!createResult.localOnly && createResult.nodeId && createResult.nodeId !== tempNodeId) {
-        finalNodeId = createResult.nodeId;
+      if (finalNodeId !== tempNodeId) {
         const replacedNode = { ...newNode, id: finalNodeId, rawData: { ...(newNode.rawData || {}), id: finalNodeId } };
         nodesDataSet.current?.remove(tempNodeId);
         const existingNode = nodesDataSet.current?.get(finalNodeId);
         if (!existingNode) {
           nodesDataSet.current?.add(replacedNode);
-        }
-
-        if (newEdge) {
-          edgesDataSet.current?.remove(newEdge.id);
-          const replacedEdge = {
-            ...newEdge,
-            id: `${fromNodeId}-${relationType}-${finalNodeId}`,
-            to: finalNodeId,
-          };
-          const existingEdge = edgesDataSet.current?.get(replacedEdge.id);
-          if (!existingEdge) {
-            edgesDataSet.current?.add(replacedEdge);
-            setAllGraphEdges((prev) => prev.map((edge) => (String(edge.id) === String(newEdge.id) ? replacedEdge : edge)));
-          } else {
-            setAllGraphEdges((prev) => prev.filter((edge) => String(edge.id) !== String(newEdge.id)));
-          }
-        }
-
-        if (existingNode) {
+          setAllGraphNodes((prev) => prev.map((node) => (
+            String(node.id) === tempNodeId ? replacedNode : node
+          )));
+          setSelectedNode(replacedNode);
+        } else {
           setAllGraphNodes((prev) => prev.filter((node) => String(node.id) !== tempNodeId));
           setSelectedNode(existingNode);
-        } else {
-          setAllGraphNodes((prev) => prev.map((node) => (String(node.id) === tempNodeId ? replacedNode : node)));
-          setSelectedNode(replacedNode);
+          shouldRollbackBackendNode = false;
+        }
+
+        edgesDataSet.current?.remove(optimisticEdgeId);
+        const replacedEdge = {
+          ...newEdge,
+          id: `${fromNodeId}-${relationType}-${finalNodeId}`,
+          to: finalNodeId,
+        };
+        edgesDataSet.current?.add(replacedEdge);
+        setAllGraphEdges((prev) => prev.map((edge) => (
+          String(edge.id) === optimisticEdgeId ? replacedEdge : edge
+        )));
+      }
+
+      const edgeResult = await persistEdgeCreate(
+        { from_id: fromNodeId, to_id: finalNodeId, type: relationType },
+        operationGroupId,
+        operationType,
+      );
+      persistedEdgeId = String(edgeResult?.edgeId || '').trim();
+      if (!persistedEdgeId) {
+        throw new Error('Create edge failed: missing edge id.');
+      }
+
+      const edgeBeforePersistId = `${fromNodeId}-${relationType}-${finalNodeId}`;
+      const edgeInDataset = edgesDataSet.current?.get(edgeBeforePersistId);
+      if (edgeInDataset) {
+        edgesDataSet.current?.remove(edgeBeforePersistId);
+        edgesDataSet.current?.add({ ...edgeInDataset, id: persistedEdgeId });
+        setAllGraphEdges((prev) => prev.map((edge) => (
+          String(edge.id) === edgeBeforePersistId ? { ...edge, id: persistedEdgeId } : edge
+        )));
+      }
+
+      setMutationNotice({ type: 'success', text: 'Node and edge created successfully.' });
+    } catch (err) {
+      const cleanupNodeIds = new Set([tempNodeId, finalNodeId, createdBackendNodeId].filter(Boolean).map((id) => String(id)));
+      cleanupNodeIds.forEach((id) => {
+        nodesDataSet.current?.remove(id);
+      });
+      setAllGraphNodes((prev) => prev.filter((node) => !cleanupNodeIds.has(String(node.id))));
+
+      const cleanupEdgeIds = new Set([
+        optimisticEdgeId,
+        `${fromNodeId}-${relationType}-${finalNodeId}`,
+        persistedEdgeId,
+      ].filter(Boolean).map((id) => String(id)));
+      cleanupEdgeIds.forEach((id) => {
+        edgesDataSet.current?.remove(id);
+      });
+      setAllGraphEdges((prev) => prev.filter((edge) => !cleanupEdgeIds.has(String(edge.id))));
+
+      let rollbackErrorText = '';
+      if (shouldRollbackBackendNode && createdBackendNodeId) {
+        try {
+          const rollbackRes = await persistNodeDeleteWithDetach(
+            createdBackendNodeId,
+            true,
+            operationGroupId,
+            `${operationType}_rollback`,
+          );
+          if (rollbackRes?.localOnly && !rollbackRes?.notFound) {
+            rollbackErrorText = 'Backend rollback endpoint unavailable.';
+          }
+        } catch (rollbackErr) {
+          rollbackErrorText = String(rollbackErr?.message || 'Rollback failed.');
         }
       }
 
-      if (newEdge) {
-        const edgeResult = await persistEdgeCreate({ from_id: fromNodeId, to_id: finalNodeId, type: relationType });
-        if (!edgeResult.localOnly && edgeResult.edgeId) {
-          const oldEdgeId = `${fromNodeId}-${relationType}-${finalNodeId}`;
-          const persistedEdgeId = String(edgeResult.edgeId);
-          const edgeInDataset = edgesDataSet.current?.get(oldEdgeId);
-          if (edgeInDataset) {
-            edgesDataSet.current?.remove(oldEdgeId);
-            edgesDataSet.current?.add({ ...edgeInDataset, id: persistedEdgeId });
-            setAllGraphEdges((prev) => prev.map((edge) => (String(edge.id) === oldEdgeId ? { ...edge, id: persistedEdgeId } : edge)));
-          }
-        }
-        if (edgeResult.localOnly || createResult.localOnly || deduplicated) {
-          setMutationNotice({ type: 'warn', text: '节点已新增（当前为前端可视化结果，后端接口未完全开放）' });
-        } else {
-          setMutationNotice({ type: 'success', text: '节点与关系新增成功' });
-        }
-      } else if (createResult.localOnly || deduplicated) {
-        setMutationNotice({ type: 'warn', text: '节点已新增（仅前端可视化）' });
-      } else {
-        setMutationNotice({ type: 'success', text: '节点新增成功' });
-      }
-    } catch (err) {
-      nodesDataSet.current?.remove(tempNodeId);
-      if (newEdge) edgesDataSet.current?.remove(newEdge.id);
-      setAllGraphNodes((prev) => prev.filter((node) => String(node.id) !== tempNodeId));
-      if (newEdge) setAllGraphEdges((prev) => prev.filter((edge) => String(edge.id) !== String(newEdge.id)));
-      setSelectedNode(null);
-      setMutationNotice({ type: 'error', text: err.message || '新增失败，已回滚' });
+      const baseError = String(err?.message || 'Create node failed.');
+      const mergedError = rollbackErrorText
+        ? `${baseError} Rollback error: ${rollbackErrorText}`
+        : `${baseError} Rolled back.`;
+      setSelectedNode(sourceNode || null);
+      setMutationNotice({ type: 'error', text: mergedError });
     }
-  }, [addNodeForm, persistEdgeCreate, persistNodeCreate, selectedNode]);
+  }, [
+    addNodeForm,
+    allGraphEdges,
+    allGraphNodes,
+    persistEdgeCreate,
+    persistNodeCreate,
+    persistNodeDeleteWithDetach,
+    selectedNode,
+    selectedNodeFilterId,
+  ]);
 
   const handleEditNodeSave = useCallback(async () => {
     if (!selectedNode) return;
@@ -1925,11 +2172,26 @@ export default function Neo4jGraph({
       const res = await fetchWithTimeout(buildApiUrl('/graph/mutations?limit=100'));
       if (!res.ok) throw new Error(`获取修改历史失败: ${res.status}`);
       const data = await res.json();
-      setMutationLogs(Array.isArray(data?.items) ? data.items : []);
+      const items = Array.isArray(data?.items) ? [...data.items] : [];
+      items.sort((a, b) => String(b?.timestamp || '').localeCompare(String(a?.timestamp || '')));
+      setMutationLogs(items);
     } catch (err) {
       setMutationNotice({ type: 'error', text: err.message || '获取修改历史失败' });
     } finally {
       setLoadingMutations(false);
+    }
+  }, [fetchWithTimeout]);
+
+  const handleClearMutationLogs = useCallback(async () => {
+    const confirmed = window.confirm('确认清空修改历史？该操作不可撤销。');
+    if (!confirmed) return;
+    try {
+      const res = await fetchWithTimeout(buildApiUrl('/graph/mutations'), { method: 'DELETE' });
+      if (!res.ok) throw new Error(`清空修改历史失败: ${res.status}`);
+      setMutationLogs([]);
+      setMutationNotice({ type: 'success', text: '修改历史已清空' });
+    } catch (err) {
+      setMutationNotice({ type: 'error', text: err.message || '清空修改历史失败' });
     }
   }, [fetchWithTimeout]);
 
@@ -1997,7 +2259,7 @@ export default function Neo4jGraph({
     if (!nodesDataSet.current || !edgesDataSet.current) return;
     if (allGraphNodes.length === 0) return;
 
-    const hasFilter = Boolean((selectedNodeFilterId || selectedPathId) && allPathEntries.length > 0);
+    const hasPathFilter = Boolean(selectedPathId && allPathEntries.length > 0);
 
     const isNodeHiddenByType = (node) => {
       if (!selectedNodeTypeOnly) return false;
@@ -2005,7 +2267,7 @@ export default function Neo4jGraph({
       return nodeType !== selectedNodeTypeOnly;
     };
 
-    if (!hasFilter) {
+    if (!hasPathFilter) {
       // 无路径筛选：仅按“类型筛选”控制可见性
       const visibleNodeIds = new Set();
       const nodeUpdates = allGraphNodes.map((n) => {
@@ -2204,11 +2466,21 @@ useEffect(() => {
     }, 200);
   }, [isFullscreen]);
 
+  const fullscreenStyle = isFullscreen
+    ? {
+        top: 16,
+        right: 16,
+        bottom: 16,
+        left: `${(isMainSidebarCollapsed ? 64 : 280) + 16}px`,
+      }
+    : undefined;
+
   return (
     <div
       className={`${isLight ? 'bg-white border border-slate-200' : 'bg-gray-900'} rounded-lg shadow-xl flex flex-col ${
-        isFullscreen ? 'fixed inset-4 z-50' : (embedded ? 'min-h-[420px] h-auto' : 'h-full')
+        isFullscreen ? 'fixed z-50' : (embedded ? 'min-h-[420px] h-auto' : 'h-full')
       }`}
+      style={fullscreenStyle}
     >
       {/* 头部 */}
       <div className={`flex items-center justify-between p-3 ${isLight ? 'border-b border-slate-200' : 'border-b border-gray-700'}`}>
@@ -2251,7 +2523,16 @@ useEffect(() => {
 
           <button
             type="button"
-            onClick={() => setIsAddingNode(true)}
+            onClick={() => {
+              const source = selectedNode
+                || (selectedNodeFilterId ? nodesDataSet.current?.get(String(selectedNodeFilterId)) : null);
+              setAddNodeForm((prev) => ({
+                ...prev,
+                fromNodeId: source ? String(source.id) : '',
+                relationType: suggestRelationTypeByNodes(source, prev.type),
+              }));
+              setIsAddingNode(true);
+            }}
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs border ${isLight ? 'bg-white border-slate-200 text-slate-700 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-800 border-gray-700 text-gray-200 hover:text-white'}`}
           >
             <Plus size={14} />
@@ -2516,11 +2797,23 @@ useEffect(() => {
                   <span>类型</span>
                   <select
                     value={addNodeForm.type}
-                    onChange={(e) => setAddNodeForm((prev) => ({ ...prev, type: e.target.value }))}
+                    onChange={(e) => {
+                      const nextType = String(e.target.value || '').trim();
+                      setAddNodeForm((prev) => {
+                        const lockedSource = prev.fromNodeId
+                          ? nodesDataSet.current?.get(String(prev.fromNodeId))
+                          : (selectedNode || (selectedNodeFilterId ? nodesDataSet.current?.get(String(selectedNodeFilterId)) : null));
+                        return {
+                          ...prev,
+                          type: nextType,
+                          relationType: suggestRelationTypeByNodes(lockedSource, nextType),
+                        };
+                      });
+                    }}
                     className={`text-sm rounded px-2 py-1 outline-none border ${isLight ? 'bg-white text-slate-700 border-slate-200' : 'bg-gray-900 text-white border-gray-700'}`}
                   >
                     {Object.keys(TYPE_LABELS).map((type) => (
-                      <option key={type} value={type}>{TYPE_LABELS[type]}（{type}）</option>
+                      <option key={type} value={type}>{TYPE_LABELS[type]} ({type})</option>
                     ))}
                   </select>
                 </label>
@@ -2534,7 +2827,37 @@ useEffect(() => {
                   />
                 </label>
                 <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
-                  <span>关系类型（可选，当前会从“已选节点”连向新节点）</span>
+                  <span>源节点</span>
+                  <select
+                    value={addNodeForm.fromNodeId || ''}
+                    onChange={(e) => {
+                      const nextFromNodeId = String(e.target.value || '').trim();
+                      const nextSource = nextFromNodeId
+                        ? nodesDataSet.current?.get(nextFromNodeId)
+                        : null;
+                      setAddNodeForm((prev) => ({
+                        ...prev,
+                        fromNodeId: nextFromNodeId,
+                        relationType: suggestRelationTypeByNodes(nextSource, prev.type),
+                      }));
+                    }}
+                    className={`text-sm rounded px-2 py-1 outline-none border ${isLight ? 'bg-white text-slate-700 border-slate-200' : 'bg-gray-900 text-white border-gray-700'}`}
+                  >
+                    <option value="">请选择源节点</option>
+                    {allGraphNodes.map((node) => {
+                      const nodeId = String(node?.id || '');
+                      const nodeType = extractNodeTypeValue(node) || 'Unknown';
+                      const nodeName = extractDisplayName(node?.rawData || node);
+                      return (
+                        <option key={nodeId} value={nodeId}>
+                          {nodeName}（{nodeType}）
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <label className={`flex flex-col gap-1 text-[11px] ${isLight ? 'text-slate-500' : 'text-gray-400'}`}>
+                  <span>Relation type (auto-filled by type, editable)</span>
                   <input
                     type="text"
                     value={addNodeForm.relationType}
@@ -2543,7 +2866,14 @@ useEffect(() => {
                   />
                 </label>
                 <div className={`text-[11px] ${isLight ? 'text-slate-400' : 'text-gray-500'}`}>
-                  {selectedNode ? `当前将从「${extractDisplayName(selectedNode.rawData || selectedNode)}」连边` : '未选择起点节点：将只新增节点'}
+                  {(() => {
+                    const lockedSource = addNodeForm.fromNodeId
+                      ? nodesDataSet.current?.get(String(addNodeForm.fromNodeId))
+                      : (selectedNode || (selectedNodeFilterId ? nodesDataSet.current?.get(String(selectedNodeFilterId)) : null));
+                    return lockedSource
+                      ? `Source node: ${extractDisplayName(lockedSource.rawData || lockedSource)}`
+                      : 'No source node selected.';
+                  })()}
                 </div>
                 <div className="flex justify-end gap-2">
                   <button
@@ -2576,6 +2906,13 @@ useEffect(() => {
                     className={`text-[11px] px-2 py-0.5 rounded border ${isLight ? 'bg-white text-slate-600 border-slate-200 hover:border-orange-300 hover:text-orange-600' : 'bg-gray-900 text-gray-300 border-gray-700 hover:text-white'}`}
                   >
                     刷新
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearMutationLogs}
+                    className={`text-[11px] px-2 py-0.5 rounded border ${isLight ? 'bg-white text-red-600 border-red-200 hover:bg-red-50' : 'bg-gray-900 text-red-300 border-red-900/50 hover:text-red-200'}`}
+                  >
+                    清空
                   </button>
                   <button
                     type="button"
@@ -2615,7 +2952,7 @@ useEffect(() => {
                   
                   return (
                     <>
-                      {Array.from(groups.entries()).reverse().map(([groupId, items]) => {
+                      {Array.from(groups.entries()).map(([groupId, items]) => {
                         const operationType = String(items[0]?.operation_type || '').trim();
                         const typeLabel = operationType === 'edit_node_by_path' ? '按路径修改节点' : '批量操作';
                         const firstTime = String(items[0]?.timestamp || '');

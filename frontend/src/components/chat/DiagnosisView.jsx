@@ -17,6 +17,23 @@ const EmptyPanelBody = ({ text }) => (
     </div>
 );
 
+const StreamPendingPanel = ({ title }) => (
+    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+        <div className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50">
+            <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <Clock size={15} className="text-slate-400" />
+                {title}
+            </span>
+            <span className="text-xs text-slate-400">生成中...</span>
+        </div>
+        <div className="px-4 py-4">
+            <div className="h-2 rounded bg-slate-100 animate-pulse mb-2" />
+            <div className="h-2 rounded bg-slate-100 animate-pulse mb-2 w-5/6" />
+            <div className="h-2 rounded bg-slate-100 animate-pulse w-2/3" />
+        </div>
+    </div>
+);
+
 // ─────────────────────────────────────────────
 // Part 1: 知识图谱面板
 // ─────────────────────────────────────────────
@@ -391,35 +408,50 @@ const PriorityCard = ({ record, index }) => {
 // ─────────────────────────────────────────────
 // 主组件：三段式诊断视图
 // ─────────────────────────────────────────────
-const DiagnosisView = ({ diagnosisData, answerText = '', userQuery = '' }) => {
+const DiagnosisView = ({ diagnosisData, answerText = '', userQuery = '', isStreaming = false }) => {
     if (!diagnosisData) return null;
 
     const { kg, records, flowchart } = diagnosisData;
     const tableRecords = records?.records || [];
     const flowRecords = flowchart?.records || tableRecords;
+    const hasKgModule = !!kg;
+    const hasRecordsModule = !!records;
+    const hasFlowchartModule = !!flowchart;
 
     return (
         <div className="space-y-4 mt-3 w-full max-w-8xl mx-auto min-w-0">
+            {isStreaming && !hasKgModule && !hasRecordsModule && !hasFlowchartModule && (
+                <StreamPendingPanel title="图谱" />
+            )}
+
             {/* Part 1: 知识图谱 */}
-            <KnowledgeGraphPanel
-                graph={kg?.graph}
-                summary={kg?.summary}
-                records={tableRecords}
-                sourceQuery={userQuery}
-            />
+            {hasKgModule && (
+                <KnowledgeGraphPanel
+                    graph={kg?.graph}
+                    summary={kg?.summary}
+                    records={tableRecords}
+                    sourceQuery={userQuery}
+                />
+            )}
+
             {/* Part 2: 原始记录 */}
-            <RecordsPanel
-                records={tableRecords}
-                summary={records?.summary}
-            />
+            {hasRecordsModule ? (
+                <RecordsPanel
+                    records={tableRecords}
+                    summary={records?.summary}
+                />
+            ) : (isStreaming && hasKgModule ? <StreamPendingPanel title="表格" /> : null)}
+
             {/* Part 3: 排查流程 */}
-            <FlowchartPanel
-                records={flowRecords}
-                summary={flowchart?.summary}
-                plan={flowchart?.plan}
-                answerText={answerText}
-                userQuery={userQuery}
-            />
+            {hasFlowchartModule ? (
+                <FlowchartPanel
+                    records={flowRecords}
+                    summary={flowchart?.summary}
+                    plan={flowchart?.plan}
+                    answerText={answerText}
+                    userQuery={userQuery}
+                />
+            ) : (isStreaming && (hasKgModule || hasRecordsModule) ? <StreamPendingPanel title="流程图" /> : null)}
         </div>
     );
 };

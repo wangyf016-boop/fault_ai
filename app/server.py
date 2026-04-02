@@ -1139,7 +1139,7 @@ def query_diagnosis(state: GraphState) -> GraphState:
         kg_nodes = state.get("diagnosis_kg", {}).get("nodes", [])
         records, records_summary = query_original_records(
             query, embedder, search_all_collections,
-            kg_nodes=kg_nodes, limit=20, score_threshold=0.6,
+            kg_nodes=kg_nodes, limit=12, score_threshold=0.6,
         )
         state["diagnosis_records"] = records
         state["qdrant_records"] = records          # 兼容现有前端表格
@@ -2210,6 +2210,60 @@ def _load_all_graph_mutation_logs() -> List[Dict[str, Any]]:
     return rows
 
 
+def _remove_graph_mutation_logs(source_mutation_id: str) -> int:
+    if not _GRAPH_MUTATION_LOG_PATH.exists():
+        return 0
+    sid = str(source_mutation_id or "").strip()
+    if not sid:
+        return 0
+    kept: List[Dict[str, Any]] = []
+    removed = 0
+    with _GRAPH_MUTATION_LOG_PATH.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except Exception:
+                continue
+            mid = str(item.get("mutation_id") or "").strip()
+            action = str(item.get("action") or "").strip()
+            target = item.get("target") if isinstance(item.get("target"), dict) else {}
+            target_source = str(target.get("source_mutation_id") or "").strip()
+            if mid == sid:
+                removed += 1
+                continue
+            if action == "rollback" and target_source == sid:
+                removed += 1
+                continue
+            kept.append(item)
+
+    if removed > 0:
+        _ensure_log_parent()
+        with _GRAPH_MUTATION_LOG_PATH.open("w", encoding="utf-8") as f:
+            for item in kept:
+                f.write(json.dumps(item, ensure_ascii=False) + "\n")
+    return removed
+
+
+def _clear_graph_mutation_logs() -> int:
+    if not _GRAPH_MUTATION_LOG_PATH.exists():
+        return 0
+    try:
+        count = 0
+        with _GRAPH_MUTATION_LOG_PATH.open("r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    count += 1
+    except Exception:
+        count = 0
+    _ensure_log_parent()
+    with _GRAPH_MUTATION_LOG_PATH.open("w", encoding="utf-8") as f:
+        f.write("")
+    return count
+
+
 def _clean_operation_text(value: Any, max_len: int = 128) -> str:
     text = str(value or "").strip()
     if not text:
@@ -2986,6 +3040,12 @@ async def list_graph_mutations(limit: int = 50):
     return GraphMutationLogListResponse(total=len(items), items=items)
 
 
+@app.delete("/graph/mutations")
+async def clear_graph_mutations():
+    removed = _clear_graph_mutation_logs()
+    return {"success": True, "removed": removed}
+
+
 @app.post("/graph/mutations/{mutation_id}/rollback", response_model=GraphMutationRollbackResponse)
 async def rollback_graph_mutation(mutation_id: str, request: Request):
     row = _find_graph_mutation(mutation_id)
@@ -3010,11 +3070,6 @@ async def rollback_graph_mutation(mutation_id: str, request: Request):
     if not action:
         raise HTTPException(status_code=400, detail="mutation 缺少 inverse 信息")
 
-    rollback_meta = _resolve_operation_meta(
-        request,
-        fallback_type="rollback_single",
-        fallback_group_id=f"rollback:{mutation_id}",
-    )
     driver = _neo4j_driver()
     rollback_id = str(uuid.uuid4())
     try:
@@ -3140,21 +3195,7 @@ RETURN elementId(r) AS rel_id
             else:
                 raise HTTPException(status_code=400, detail=f"不支持的回滚动作: {action}")
 
-        rollback_log = {
-            "mutation_id": rollback_id,
-            "timestamp": _now_iso(),
-            "action": "rollback",
-            **rollback_meta,
-            "target": {
-                "source_mutation_id": mutation_id,
-                "source_action": str(row.get("action") or ""),
-                "source_operation_group_id": str(row.get("operation_group_id") or ""),
-            },
-            "request": {"inverse_action": action},
-            "inverse": {},
-            "details": details,
-        }
-        _append_graph_mutation_log(rollback_log)
+        _remove_graph_mutation_logs(mutation_id)
 
         return GraphMutationRollbackResponse(
             rolled_back=True,
@@ -3468,23 +3509,83 @@ async def chat(payload: ChatRequest, fastapi_request: Request):
 
             # 2. 根据主路由执行
             if route_used == "diagnosis":
-                # ---------- 三段式智能诊断 ----------
-                state = query_diagnosis(state)
+                # ---------- 三段式智能诊断（流式分阶段发送） ----------
+                # 先发送一条引导文案，避免前置等待期间界面空白
+                yield f"data: {json.dumps({'type': 'content', 'content': '正在生成图谱、表格和流程图，请稍候...'}, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.005)
+
+                # Part1: 知识图谱
+                try:
+                    kg_data = query_kg_subgraph(state["query"], embedder)
+                    state["diagnosis_kg"] = kg_data
+                    state["diagnosis_kg_summary"] = kg_data.get("summary", "")
+                    print(f"[UI-V2][diagnosis][part1] nodes={len(kg_data.get('nodes', []))}, links={len(kg_data.get('links', []))}")
+                except Exception as e:
+                    print(f"[UI-V2][diagnosis][part1] failed: {e}")
+                    state["diagnosis_kg"] = {"nodes": [], "links": [], "categories": []}
+                    state["diagnosis_kg_summary"] = f"知识图谱查询失败: {e}"
+
+                yield f"data: {json.dumps({'type': 'diagnosis_kg', 'graph': state.get('diagnosis_kg', {}), 'summary': state.get('diagnosis_kg_summary', '')}, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.005)
+
+                # Part2: 原始记录
+                try:
+                    kg_nodes = state.get("diagnosis_kg", {}).get("nodes", [])
+                    records, records_summary = query_original_records(
+                        state["query"],
+                        embedder,
+                        search_all_collections,
+                        kg_nodes=kg_nodes,
+                        limit=12,
+                        score_threshold=0.6,
+                    )
+                    state["diagnosis_records"] = records
+                    state["qdrant_records"] = records
+                    state["diagnosis_records_summary"] = records_summary
+                    print(f"[UI-V2][diagnosis][part2] records={len(records)}")
+                except Exception as e:
+                    print(f"[UI-V2][diagnosis][part2] failed: {e}")
+                    state["diagnosis_records"] = []
+                    state["qdrant_records"] = []
+                    state["diagnosis_records_summary"] = f"向量检索失败: {e}"
+
+                yield f"data: {json.dumps({'type': 'diagnosis_records', 'records': state.get('diagnosis_records', []), 'summary': state.get('diagnosis_records_summary', '')}, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.005)
+
+                # Part3: 流程图
+                try:
+                    flowchart, flowchart_summary = build_flowchart_data(
+                        state.get("diagnosis_records", [])
+                    )
+                    state["diagnosis_flowchart"] = flowchart
+                    state["diagnosis_flowchart_summary"] = flowchart_summary
+                    state["diagnosis_flow_plan"] = _build_flow_plan_with_llm(
+                        query=state["query"],
+                        flowchart_records=flowchart,
+                        flowchart_summary=flowchart_summary,
+                        station_hint=_extract_station_from_query(state["query"]),
+                    )
+                    print(f"[UI-V2][diagnosis][part3] flow_records={len(flowchart)}, plan_steps={len(state['diagnosis_flow_plan'].get('steps', []))}")
+                except Exception as e:
+                    print(f"[UI-V2][diagnosis][part3] failed: {e}")
+                    state["diagnosis_flowchart"] = []
+                    state["diagnosis_flowchart_summary"] = f"排序失败: {e}"
+                    state["diagnosis_flow_plan"] = {"likely_cause": "", "steps": [], "verify": "", "branch_mode": "single", "cause_branches": [], "diagram_spec": {"version": "dsl_v1", "problem": "当前问题", "likely_cause": "", "mode": "single", "steps": [], "branches": [], "verify": "处理后连续复测通过"}}
+
+                yield f"data: {json.dumps({'type': 'diagnosis_flowchart', 'records': state.get('diagnosis_flowchart', []), 'summary': state.get('diagnosis_flowchart_summary', ''), 'plan': state.get('diagnosis_flow_plan', {})}, ensure_ascii=False)}\n\n"
+                await asyncio.sleep(0.005)
+
+                # 汇总与引导文案
+                state["context"] = "[来源: 三段式智能诊断]\n\n" + (
+                    state.get("diagnosis_kg_summary", "") + "\n" +
+                    state.get("diagnosis_records_summary", "") + "\n" +
+                    state.get("diagnosis_flowchart_summary", "")
+                )
+                state["final_answer"] = "已生成图谱、表格和流程图，请先查看结果；如需解释请在下方继续追问。"
+                state["show_graph"] = True
+                state["show_table"] = True
+
                 qdrant_records = state.get("qdrant_records", [])
-
-                kg_data = state.get("diagnosis_kg", {})
-                kg_summary = state.get("diagnosis_kg_summary", "")
-                yield f"data: {json.dumps({'type': 'diagnosis_kg', 'graph': kg_data, 'summary': kg_summary}, ensure_ascii=False)}\n\n"
-
-                records = state.get("diagnosis_records", [])
-                records_summary = state.get("diagnosis_records_summary", "")
-                yield f"data: {json.dumps({'type': 'diagnosis_records', 'records': records, 'summary': records_summary}, ensure_ascii=False)}\n\n"
-
-                flowchart = state.get("diagnosis_flowchart", [])
-                flowchart_summary = state.get("diagnosis_flowchart_summary", "")
-                flowchart_plan = state.get("diagnosis_flow_plan", {"likely_cause": "", "steps": [], "verify": "", "branch_mode": "single", "cause_branches": [], "diagram_spec": {"version": "dsl_v1", "problem": "当前问题", "likely_cause": "", "mode": "single", "steps": [], "branches": [], "verify": "处理后连续复测通过"}})
-                yield f"data: {json.dumps({'type': 'diagnosis_flowchart', 'records': flowchart, 'summary': flowchart_summary, 'plan': flowchart_plan}, ensure_ascii=False)}\n\n"
-
                 response_text = state.get("final_answer", RESULTS_LEAD_TEXT) or RESULTS_LEAD_TEXT
                 print(f"[UI-V2][diagnosis] records={len(qdrant_records)}, lead_text_sent=1")
                 yield f"data: {json.dumps({'type': 'content', 'content': response_text}, ensure_ascii=False)}\n\n"
@@ -3506,10 +3607,6 @@ async def chat(payload: ChatRequest, fastapi_request: Request):
                 show_graph_for_save = bool(state.get("show_graph", False))
 
                 if qdrant_records:
-                    response_text = RESULTS_LEAD_TEXT
-                    print(f"[UI-V2][search] strategy={search_strategy}, records={len(qdrant_records)}, lead_text_sent=1")
-                    yield f"data: {json.dumps({'type': 'content', 'content': response_text}, ensure_ascii=False)}\n\n"
-
                     records_json = json.dumps(
                         {
                             'type': 'records',
@@ -3520,6 +3617,12 @@ async def chat(payload: ChatRequest, fastapi_request: Request):
                         ensure_ascii=False,
                     )
                     yield f"data: {records_json}\n\n"
+                    await asyncio.sleep(0.005)
+
+                    response_text = RESULTS_LEAD_TEXT
+                    print(f"[UI-V2][search] strategy={search_strategy}, records={len(qdrant_records)}, lead_text_sent=1")
+                    yield f"data: {json.dumps({'type': 'content', 'content': response_text}, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.005)
 
                     try:
                         _station_hint = _extract_station_from_query(state["query"])
@@ -3532,6 +3635,7 @@ async def chat(payload: ChatRequest, fastapi_request: Request):
                         flow_plan_for_save = flow_plan
                         print(f"[Stream] search flow_plan: {len(flow_plan.get('steps', []))} steps")
                         yield f"data: {json.dumps({'type': 'flow_plan', 'plan': flow_plan}, ensure_ascii=False)}\n\n"
+                        await asyncio.sleep(0.04)
                     except Exception as e:
                         print(f"[Stream] search flow_plan 生成失败: {e}")
                 else:

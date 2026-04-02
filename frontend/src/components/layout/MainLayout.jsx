@@ -3,7 +3,25 @@ import { Outlet, NavLink } from 'react-router-dom';
 import { MessageSquare, Network, Database, FileSearch, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const MainLayout = () => {
-    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isCollapsed, setIsCollapsed] = useState(() => {
+        try {
+            return localStorage.getItem('mainLayoutSidebarCollapsed') === '1';
+        } catch {
+            return false;
+        }
+    });
+
+    React.useEffect(() => {
+        try {
+            localStorage.setItem('mainLayoutSidebarCollapsed', isCollapsed ? '1' : '0');
+        } catch {
+            // ignore storage errors
+        }
+
+        window.dispatchEvent(new CustomEvent('layout:main-sidebar-change', {
+            detail: { collapsed: isCollapsed }
+        }));
+    }, [isCollapsed]);
 
     const navItems = [
         { icon: MessageSquare, label: 'Chat', path: '/chat' },
@@ -17,7 +35,7 @@ const MainLayout = () => {
         <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
             {/* Sidebar */}
             <aside 
-                className={`${isCollapsed ? 'w-0 min-w-0 border-r-0' : 'w-[280px] border-r border-slate-200'} shrink-0 flex flex-col bg-white transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] relative z-30 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] overflow-visible`}
+                className={`${isCollapsed ? 'w-16 min-w-[64px] border-r border-slate-200' : 'w-[280px] border-r border-slate-200'} shrink-0 flex flex-col bg-white transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] relative z-30 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] overflow-visible`}
             >
                 {/* Toggle Button */}
                 <button 
@@ -27,7 +45,7 @@ const MainLayout = () => {
                     {isCollapsed ? <ChevronRight size={14} strokeWidth={3} /> : <ChevronLeft size={14} strokeWidth={3} />}
                 </button>
 
-                {!isCollapsed && (
+                {!isCollapsed ? (
                     <>
                     <div className="h-20 flex items-center px-5 border-b border-slate-100/80">
                         <div className="flex items-center gap-3">
@@ -98,6 +116,29 @@ const MainLayout = () => {
                         </div>
                 </div>
                 </>
+                ) : (
+                    <div className="flex-1 flex flex-col items-center pt-6 pb-4 gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-orange-500 to-brand-purple-500 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-brand-orange-500/30">
+                            M
+                        </div>
+                        <div className="mt-4 flex flex-col items-center gap-2">
+                            {navItems.map((item) => (
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    className={({ isActive }) =>
+                                        `w-10 h-10 rounded-xl flex items-center justify-center transition-all ${isActive
+                                            ? 'bg-brand-orange-50 text-brand-orange-600 border border-brand-orange-100'
+                                            : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
+                                        }`
+                                    }
+                                    title={item.label}
+                                >
+                                    <item.icon size={18} />
+                                </NavLink>
+                            ))}
+                        </div>
+                    </div>
                 )}
             </aside>
 
